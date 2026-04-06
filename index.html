@@ -10,28 +10,94 @@
   <div class="hero">
     <h1>SafeHer</h1>
     <p class="tagline">A unified women safety platform</p>
-    <p class="desc">Choose your interface to continue</p>
-    <div class="role-grid">
-      <a href="user.html" class="role-card user-card">
-        <div class="icon">U</div>
-        <h2>User</h2>
-        <p>SOS alerts, live tracking, safe routes, trusted contacts, incident reporting</p>
-      </a>
-      <a href="police.html" class="role-card police-card">
-        <div class="icon">P</div>
-        <h2>Police</h2>
-        <p>Monitor live SOS alerts, dispatch patrols, manage incident reports</p>
-      </a>
-      <a href="hospital.html" class="role-card hospital-card">
-        <div class="icon">H</div>
-        <h2>Hospital</h2>
-        <p>Receive medical emergencies, dispatch ambulances, track patients</p>
-      </a>
+
+    <!-- Login Form -->
+    <div id="loginBox" class="login-box card">
+      <h2>Login</h2>
+      <div class="form">
+        <input type="text" id="loginName" placeholder="Full Name" required />
+        <input type="email" id="loginEmail" placeholder="Email" required />
+        <input type="password" id="loginPass" placeholder="Password" required />
+        <div class="role-select">
+          <label class="role-option user-opt">
+            <input type="radio" name="role" value="user" checked />
+            <span class="role-label">User</span>
+          </label>
+          <label class="role-option police-opt">
+            <input type="radio" name="role" value="police" />
+            <span class="role-label">Police</span>
+          </label>
+          <label class="role-option hospital-opt">
+            <input type="radio" name="role" value="hospital" />
+            <span class="role-label">Hospital</span>
+          </label>
+        </div>
+
+        <!-- Police-specific fields -->
+        <div id="policeFields" class="extra-fields" style="display:none">
+          <input type="text" id="policeBadge" placeholder="Badge Number" />
+          <input type="text" id="policeStation" placeholder="Station Name" />
+        </div>
+
+        <!-- Hospital-specific fields -->
+        <div id="hospitalFields" class="extra-fields" style="display:none">
+          <input type="text" id="hospitalName" placeholder="Hospital Name" />
+          <input type="text" id="hospitalDept" placeholder="Department" />
+        </div>
+
+        <button class="btn" id="loginBtn">Login</button>
+        <p id="loginError" class="status"></p>
+      </div>
+      <p class="switch-text">Don't have an account? <a href="#" id="showRegister">Register</a></p>
     </div>
+
+    <!-- Register Form -->
+    <div id="registerBox" class="login-box card" style="display:none">
+      <h2>Register</h2>
+      <div class="form">
+        <input type="text" id="regName" placeholder="Full Name" required />
+        <input type="email" id="regEmail" placeholder="Email" required />
+        <input type="tel" id="regPhone" placeholder="Phone Number" required />
+        <input type="password" id="regPass" placeholder="Password (min 6 chars)" required />
+        <input type="password" id="regConfirm" placeholder="Confirm Password" required />
+        <div class="role-select">
+          <label class="role-option user-opt">
+            <input type="radio" name="regRole" value="user" checked />
+            <span class="role-label">User</span>
+          </label>
+          <label class="role-option police-opt">
+            <input type="radio" name="regRole" value="police" />
+            <span class="role-label">Police</span>
+          </label>
+          <label class="role-option hospital-opt">
+            <input type="radio" name="regRole" value="hospital" />
+            <span class="role-label">Hospital</span>
+          </label>
+        </div>
+
+        <!-- Police registration fields -->
+        <div id="regPoliceFields" class="extra-fields" style="display:none">
+          <input type="text" id="regPoliceBadge" placeholder="Badge Number" />
+          <input type="text" id="regPoliceStation" placeholder="Station Name" />
+        </div>
+
+        <!-- Hospital registration fields -->
+        <div id="regHospitalFields" class="extra-fields" style="display:none">
+          <input type="text" id="regHospitalName" placeholder="Hospital Name" />
+          <input type="text" id="regHospitalDept" placeholder="Department" />
+        </div>
+
+        <button class="btn" id="registerBtn">Create Account</button>
+        <p id="regError" class="status"></p>
+      </div>
+      <p class="switch-text">Already have an account? <a href="#" id="showLogin">Login</a></p>
+    </div>
+
     <footer>
-      <p>Emergency? Press and hold SOS on the User interface.</p>
+      <p>Emergency? Register as a User and press SOS.</p>
     </footer>
   </div>
   <script src="js/app.js"></script>
+  <script src="js/auth.js"></script>
 </body>
 </html>

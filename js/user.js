@@ -1,15 +1,15 @@
 // User interface logic
 const $ = (id) => document.getElementById(id);
 
-// Load profile
+// Load profile (merge session + saved profile)
 function loadProfile() {
+  const session = DB.get('safeher.session', {});
   const p = DB.get(K.profile, {});
-  $('profName').value = p.name || '';
-  $('profPhone').value = p.phone || '';
+  $('profName').value = p.name || session.name || '';
+  $('profPhone').value = p.phone || session.phone || '';
   $('profAge').value = p.age || '';
   $('profBlood').value = p.blood || '';
   $('profMedical').value = p.medical || '';
-  $('userInfo').textContent = p.name ? 'Hi, ' + p.name : 'Guest';
 }
 $('saveProfile').onclick = () => {
   const p = {

@@ -43,6 +43,34 @@ body {
 .role-card p { color: var(--muted); font-size: 14px; }
 footer { margin-top: 40px; color: var(--muted); font-size: 14px; }
 
+/* Login */
+.login-box { max-width: 420px; margin: 24px auto; text-align: left; }
+.login-box h2 { text-align: center; margin-bottom: 16px; }
+.role-select { display: flex; gap: 10px; justify-content: center; }
+.role-option { cursor: pointer; }
+.role-option input { display: none; }
+.role-label {
+  display: inline-block; padding: 10px 20px; border-radius: 8px;
+  border: 1px solid var(--border); color: var(--muted); font-size: 14px;
+  font-weight: 600; transition: all .2s;
+}
+.role-option input:checked + .role-label { border-color: var(--accent); color: var(--text); background: rgba(255,59,107,.1); }
+.user-opt input:checked + .role-label { border-color: var(--user); background: rgba(255,59,107,.1); }
+.police-opt input:checked + .role-label { border-color: var(--police); background: rgba(43,108,255,.1); }
+.hospital-opt input:checked + .role-label { border-color: var(--hospital); background: rgba(34,197,94,.1); }
+.extra-fields { display: flex; flex-direction: column; gap: 10px; }
+.switch-text { text-align: center; margin-top: 16px; color: var(--muted); font-size: 14px; }
+.switch-text a { color: var(--accent); text-decoration: none; }
+.switch-text a:hover { text-decoration: underline; }
+
+/* Logout */
+.logout-btn {
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  flex-shrink: 0; transition: all .2s;
+}
+.logout-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 /* Topbar */
 .topbar {
   display: flex; align-items: center; padding: 12px 16px;
