@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Bank Finder</title>
+  <link rel="stylesheet" href="css/blood-bank.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">&#x1FA78;</span>
+      <h1 id="appName">Blood Bank Finder</h1>
+      <span class="badge-mvp">MVP</span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-text" id="btnExport" onclick="exportData()">Export</button>
+      <button class="btn-text" id="btnImport" onclick="document.getElementById('importFile').click()">Import</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="find" onclick="switchTab('find')">Find Blood</button>
+    <button class="tab" data-tab="manage" onclick="switchTab('manage')">Manage Hospitals</button>
+    <button class="tab" data-tab="admin" onclick="switchTab('admin')">Admin</button>
+  </nav>
+
+  <!-- ==================== FIND BLOOD TAB ==================== -->
+  <main id="tab-find" class="tab-content active">
+    <div class="filters">
+      <select id="filterGroup">
+        <option value="">Any group</option>
+        <option>A+</option><option>A-</option>
+        <option>B+</option><option>B-</option>
+        <option>AB+</option><option>AB-</option>
+        <option>O+</option><option>O-</option>
+      </select>
+      <input type="text" id="filterCity" placeholder="City (e.g., Mumbai)">
+      <input type="text" id="filterPin" placeholder="PIN code (optional)">
+      <input type="text" id="filterName" placeholder="Hospital / Blood bank name">
+      <button class="btn-text" onclick="clearFilters()">Clear</button>
+    </div>
+    <div id="searchResults"></div>
+  </main>
+
+  <!-- ==================== MANAGE HOSPITALS TAB ==================== -->
+  <main id="tab-manage" class="tab-content">
+    <div class="manage-layout">
+      <div class="manage-list" id="manageList"></div>
+      <div class="manage-form-wrap">
+        <div class="card form-card">
+          <h2 id="formTitle">&#x2795; Add Hospital / Blood Bank</h2>
+          <input type="hidden" id="editId">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Name*</label>
+              <input type="text" id="fName" placeholder="e.g., Sunrise Blood Centre">
+            </div>
+            <div class="form-group">
+              <label>Type</label>
+              <select id="fType">
+                <option>Blood Bank</option>
+                <option>Hospital</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Contact Person</label>
+              <input type="text" id="fContact" placeholder="Name of in-charge">
+            </div>
+            <div class="form-group flex-1">
+              <label>Mobile</label>
+              <input type="text" id="fMobile" placeholder="+91 ...">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Landline</label>
+              <input type="text" id="fLandline" placeholder="e.g., 022-xxxx-yyyy">
+            </div>
+            <div class="form-group flex-1">
+              <label>Hours</label>
+              <input type="text" id="fHours" placeholder="24x7">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label>Address</label>
+              <input type="text" id="fAddress" placeholder="Street & Area">
+            </div>
+            <div class="form-group flex-1">
+              <label>City*</label>
+              <input type="text" id="fCity" placeholder="City">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>PIN code</label>
+              <input type="text" id="fPin" placeholder="6 digits" maxlength="6">
+            </div>
+          </div>
+
+          <div class="inventory-header">
+            <h3>Inventory</h3>
+            <button class="btn-text" onclick="addInventoryLine()">Add line</button>
+          </div>
+          <div id="inventoryLines"></div>
+          <p id="noInventory" class="muted">No lines yet. Add blood groups and quantities.</p>
+
+          <div class="form-actions">
+            <button class="btn-secondary" id="btnCancelEdit" onclick="cancelEdit()" style="display:none">Cancel</button>
+            <button class="btn-primary" onclick="saveHospital()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== ADMIN TAB ==================== -->
+  <main id="tab-admin" class="tab-content">
+    <div class="admin-layout">
+      <div class="card">
+        <h2>&#x1FA78; Admin Settings</h2>
+        <div class="form-group">
+          <label>Organisation / App name</label>
+          <input type="text" id="adminAppName" placeholder="Blood Bank Finder">
+        </div>
+        <div class="form-group">
+          <label>Public notice (footer)</label>
+          <input type="text" id="adminNotice" placeholder="Public demo – verify details with the provider.">
+        </div>
+        <button class="btn-danger" onclick="resetDemoData()">Reset demo data</button>
+      </div>
+      <div class="card">
+        <h2>&#x1F3E0; About this Admin</h2>
+        <p>Pages: <strong>Find Blood</strong> (public search), <strong>Manage Hospitals</strong> (inventory CRUD), <strong>Admin</strong> (basic settings).</p>
+      </div>
+    </div>
+  </main>
+
+  <footer id="appFooter">
+    <span>&#x26A0;</span> <span id="footerText">Demo app. Always verify availability with the provider. Prices are handled by providers directly.</span>
+  </footer>
+
+  <script src="js/blood-bank.js"></script>
+</body>
+</html>
