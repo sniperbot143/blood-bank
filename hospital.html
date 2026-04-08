@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Bank – Hospital Panel</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo-sm">&#x1FA78;</span>
+      <h1>Hospital Panel</h1>
+      <span class="badge hosp-badge">Hospital</span>
+    </div>
+    <div class="topbar-right">
+      <span class="greeting" id="greeting"></span>
+      <button class="btn-text" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="inventory" onclick="switchTab('inventory')">Blood Inventory</button>
+    <button class="tab" data-tab="orders" onclick="switchTab('orders')">Incoming Orders</button>
+    <button class="tab" data-tab="profile" onclick="switchTab('profile')">Hospital Profile</button>
+    <button class="tab" data-tab="subscription" onclick="switchTab('subscription')">Subscription</button>
+  </nav>
+
+  <!-- ═══ INVENTORY TAB ═══ -->
+  <main id="tab-inventory" class="tab-content active">
+    <div class="section-header">
+      <h2>Blood Inventory</h2>
+      <p class="muted">Manage blood units available at your facility</p>
+    </div>
+
+    <div id="subWarning" class="alert alert-warning" style="display:none">
+      Your subscription is inactive. Your inventory won't be visible to users. <a href="#" onclick="switchTab('subscription')">Activate subscription</a>
+    </div>
+
+    <div class="inv-grid" id="invGrid"></div>
+
+    <div class="card" style="margin-top:20px">
+      <h3>Add / Update Blood Stock</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Blood Group</label>
+          <select id="invGroup">
+            <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+            <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Units Available</label>
+          <input type="number" id="invUnits" min="0" value="0">
+        </div>
+        <div class="form-group">
+          <label>Price per Unit (INR)</label>
+          <input type="number" id="invPrice" min="0" value="0">
+        </div>
+        <div class="form-group" style="align-self:flex-end">
+          <button class="btn-primary" onclick="handleAddStock()">Save Stock</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ ORDERS TAB ═══ -->
+  <main id="tab-orders" class="tab-content">
+    <div class="section-header">
+      <h2>Incoming Orders</h2>
+      <p class="muted">Blood orders from users that need your action</p>
+    </div>
+    <div id="ordersList"></div>
+  </main>
+
+  <!-- ═══ PROFILE TAB ═══ -->
+  <main id="tab-profile" class="tab-content">
+    <div class="card" style="max-width:600px">
+      <h2>Hospital Profile</h2>
+      <div id="profileNotVerified" class="alert alert-warning" style="display:none">
+        Your hospital is pending admin verification. Some features may be limited.
+      </div>
+      <div class="form-group"><label>Hospital Name</label><input type="text" id="pName"></div>
+      <div class="form-row">
+        <div class="form-group flex-1"><label>Type</label>
+          <select id="pType"><option>Hospital</option><option>Blood Bank</option></select>
+        </div>
+        <div class="form-group flex-1"><label>City</label><input type="text" id="pCity"></div>
+      </div>
+      <div class="form-group"><label>Address</label><input type="text" id="pAddress"></div>
+      <div class="form-row">
+        <div class="form-group flex-1"><label>Phone</label><input type="text" id="pPhone"></div>
+        <div class="form-group flex-1"><label>Landline</label><input type="text" id="pLandline"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group flex-1"><label>Contact Person</label><input type="text" id="pContact"></div>
+        <div class="form-group flex-1"><label>Hours</label><input type="text" id="pHours"></div>
+      </div>
+      <button class="btn-primary" onclick="saveProfile()" style="margin-top:12px">Save Profile</button>
+    </div>
+  </main>
+
+  <!-- ═══ SUBSCRIPTION TAB ═══ -->
+  <main id="tab-subscription" class="tab-content">
+    <div class="section-header">
+      <h2>Subscription</h2>
+      <p class="muted">An active subscription makes your inventory visible to users</p>
+    </div>
+    <div id="subStatus"></div>
+    <div class="sub-plans">
+      <div class="card plan-card">
+        <h3>Basic Plan</h3>
+        <div class="plan-price">&#x20B9;2,000<span>/month</span></div>
+        <ul>
+          <li>List blood inventory</li>
+          <li>Receive orders</li>
+          <li>Basic support</li>
+        </ul>
+        <button class="btn-primary btn-block" onclick="handleSubscribe('Basic', 2000)">Subscribe – Basic</button>
+      </div>
+      <div class="card plan-card featured">
+        <h3>Premium Plan</h3>
+        <div class="plan-price">&#x20B9;5,000<span>/month</span></div>
+        <ul>
+          <li>Everything in Basic</li>
+          <li>Priority listing</li>
+          <li>Analytics dashboard</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="btn-primary btn-block" onclick="handleSubscribe('Premium', 5000)">Subscribe – Premium</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span>&#x26A0;</span> Demo app. Always verify availability with the provider.
+  </footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/hospital.js"></script>
+</body>
+</html>

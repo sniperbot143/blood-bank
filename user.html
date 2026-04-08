@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Bank – Find Blood</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo-sm">&#x1FA78;</span>
+      <h1>Blood Bank</h1>
+      <span class="badge user-badge">User</span>
+    </div>
+    <div class="topbar-right">
+      <span class="greeting" id="greeting"></span>
+      <button class="btn-text" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="search" onclick="switchTab('search')">Find Blood</button>
+    <button class="tab" data-tab="order" onclick="switchTab('order')">Order Blood</button>
+    <button class="tab" data-tab="myorders" onclick="switchTab('myorders')">My Orders</button>
+  </nav>
+
+  <!-- ═══ SEARCH TAB ═══ -->
+  <main id="tab-search" class="tab-content active">
+    <div class="section-header">
+      <h2>Blood Availability</h2>
+      <p class="muted">Collective inventory from all verified blood banks and hospitals</p>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="blood-summary" id="bloodSummary"></div>
+
+    <!-- Filters -->
+    <div class="filters" style="margin-top:20px">
+      <select id="filterGroup">
+        <option value="">All blood groups</option>
+        <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+        <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+      </select>
+      <input type="text" id="filterCity" placeholder="Filter by city...">
+      <button class="btn-text" onclick="$('filterGroup').value='';$('filterCity').value='';renderProviders()">Clear</button>
+    </div>
+
+    <!-- Provider list -->
+    <div id="providerList"></div>
+  </main>
+
+  <!-- ═══ ORDER TAB ═══ -->
+  <main id="tab-order" class="tab-content">
+    <div class="order-layout">
+      <div class="card order-card">
+        <h2>&#x1FA78; Place Blood Order</h2>
+        <p class="muted">Fill in the details below. The hospital where your patient is admitted will coordinate with the blood bank for sampling and testing.</p>
+        <div id="orderError" class="alert alert-error" style="display:none"></div>
+        <div id="orderSuccess" class="alert alert-success" style="display:none"></div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Patient Name *</label>
+            <input type="text" id="oPatient" placeholder="Full name of patient">
+          </div>
+          <div class="form-group flex-1">
+            <label>Your Phone *</label>
+            <input type="text" id="oPhone" placeholder="+91 ...">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Blood Group Needed *</label>
+            <select id="oGroup">
+              <option value="">Select group</option>
+              <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+              <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label>Units Needed *</label>
+            <input type="number" id="oUnits" min="1" value="1">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Hospital where patient is admitted *</label>
+          <select id="oAdmittedHospital">
+            <option value="">Select hospital</option>
+          </select>
+          <span class="muted" style="font-size:11px">This hospital will coordinate blood sampling & testing</span>
+        </div>
+
+        <div class="form-group">
+          <label>Blood Bank / Supplier *</label>
+          <select id="oSupplier">
+            <option value="">Select blood bank / hospital</option>
+          </select>
+          <span class="muted" style="font-size:11px">Where the blood will be sourced from</span>
+        </div>
+
+        <div class="form-group">
+          <label>Notes (optional)</label>
+          <textarea id="oNotes" rows="3" placeholder="Any special instructions, urgency level, etc."></textarea>
+        </div>
+
+        <button class="btn-primary btn-block" onclick="handlePlaceOrder()">Place Order</button>
+      </div>
+
+      <div class="card info-card">
+        <h3>How it works</h3>
+        <ol class="how-it-works">
+          <li>Select the blood group and units needed</li>
+          <li>Choose the hospital where your patient is admitted</li>
+          <li>Choose a blood bank that has the required blood</li>
+          <li>Place the order – the admitted hospital receives notification</li>
+          <li>The hospital contacts the blood bank for sampling &amp; testing</li>
+          <li>Once tested and approved, blood is delivered to the patient</li>
+        </ol>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ MY ORDERS TAB ═══ -->
+  <main id="tab-myorders" class="tab-content">
+    <div class="section-header">
+      <h2>My Orders</h2>
+      <p class="muted">Track the status of your blood orders</p>
+    </div>
+    <div id="myOrdersList"></div>
+  </main>
+
+  <footer>
+    <span>&#x26A0;</span> Demo app. Always verify availability with the provider. Prices are handled by providers directly.
+  </footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/user.js"></script>
+</body>
+</html>

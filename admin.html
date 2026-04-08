@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blood Bank – Admin Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo-sm">&#x1FA78;</span>
+      <h1>Admin Dashboard</h1>
+      <span class="badge admin-badge">Admin</span>
+    </div>
+    <div class="topbar-right">
+      <span class="greeting" id="greeting"></span>
+      <button class="btn-text" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+    <button class="tab" data-tab="users" onclick="switchTab('users')">Users</button>
+    <button class="tab" data-tab="hospitals" onclick="switchTab('hospitals')">Hospitals</button>
+    <button class="tab" data-tab="subscriptions" onclick="switchTab('subscriptions')">Subscriptions</button>
+    <button class="tab" data-tab="orders" onclick="switchTab('orders')">All Orders</button>
+    <button class="tab" data-tab="inventory" onclick="switchTab('inventory')">Blood Stock</button>
+    <button class="tab" data-tab="logins" onclick="switchTab('logins')">Login Logs</button>
+    <button class="tab" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+  </nav>
+
+  <!-- ═══ OVERVIEW TAB ═══ -->
+  <main id="tab-overview" class="tab-content active">
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <div class="two-col" style="margin-top:20px">
+      <div class="card">
+        <h3>Recent Logins</h3>
+        <div id="recentLogins"></div>
+      </div>
+      <div class="card">
+        <h3>Recent Orders</h3>
+        <div id="recentOrders"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ USERS TAB ═══ -->
+  <main id="tab-users" class="tab-content">
+    <div class="section-header">
+      <h2>Registered Users</h2>
+      <p class="muted">All retail users on the platform</p>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="usersTable">
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Registered</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- ═══ HOSPITALS TAB ═══ -->
+  <main id="tab-hospitals" class="tab-content">
+    <div class="section-header">
+      <h2>Hospitals &amp; Blood Banks</h2>
+      <p class="muted">Manage verification and details</p>
+    </div>
+    <div id="hospitalsList"></div>
+  </main>
+
+  <!-- ═══ SUBSCRIPTIONS TAB ═══ -->
+  <main id="tab-subscriptions" class="tab-content">
+    <div class="section-header">
+      <h2>Paid Subscriptions</h2>
+      <p class="muted">Revenue from hospital subscriptions</p>
+    </div>
+    <div id="totalRevenue" class="revenue-banner"></div>
+    <div class="table-wrap">
+      <table class="data-table" id="subsTable">
+        <thead><tr><th>Hospital</th><th>Plan</th><th>Amount</th><th>Status</th><th>Started</th><th>Expires</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- ═══ ALL ORDERS TAB ═══ -->
+  <main id="tab-orders" class="tab-content">
+    <div class="section-header">
+      <h2>All Orders</h2>
+      <p class="muted">Every blood order on the platform</p>
+    </div>
+    <div id="allOrdersList"></div>
+  </main>
+
+  <!-- ═══ BLOOD STOCK TAB ═══ -->
+  <main id="tab-inventory" class="tab-content">
+    <div class="section-header">
+      <h2>Collective Blood Stock</h2>
+      <p class="muted">Aggregated inventory across all hospitals</p>
+    </div>
+    <div class="blood-summary" id="adminBloodSummary"></div>
+    <div id="adminProviderList" style="margin-top:20px"></div>
+  </main>
+
+  <!-- ═══ LOGIN LOGS TAB ═══ -->
+  <main id="tab-logins" class="tab-content">
+    <div class="section-header">
+      <h2>Login History</h2>
+      <p class="muted">All user login activity</p>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="loginsTable">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- ═══ SETTINGS TAB ═══ -->
+  <main id="tab-settings" class="tab-content">
+    <div class="card" style="max-width:500px">
+      <h2>Platform Settings</h2>
+      <div class="form-group">
+        <label>Organisation / App Name</label>
+        <input type="text" id="settingsAppName" value="Blood Bank Platform">
+      </div>
+      <button class="btn-primary" onclick="saveAdminSettings()" style="margin-top:8px">Save</button>
+      <hr style="margin:20px 0">
+      <button class="btn-danger" onclick="handleResetData()">Reset All Demo Data</button>
+      <p class="muted" style="margin-top:8px">This will wipe everything and re-seed demo data.</p>
+    </div>
+  </main>
+
+  <footer>
+    <span>&#x26A0;</span> Admin panel – Blood Bank Platform
+  </footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

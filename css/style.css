@@ -1,14 +1,23 @@
+/* ═══════════════════════════════════════════
+   Blood Bank Platform – Shared Styles
+   ═══════════════════════════════════════════ */
+
 /* ── Reset & Base ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f4f5f7;color:#1e1e2f;min-height:100vh;display:flex;flex-direction:column}
+a{color:#2563eb}
 
 /* ── Topbar ── */
 .topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 24px;background:#fff;border-bottom:1px solid #e2e4e9}
 .topbar-left{display:flex;align-items:center;gap:10px}
 .topbar-left h1{font-size:18px;font-weight:700}
-.logo{font-size:22px}
-.badge-mvp{font-size:11px;font-weight:600;background:#e8e8e8;color:#555;padding:2px 8px;border-radius:4px}
-.topbar-right{display:flex;gap:8px}
+.logo-sm{font-size:22px}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.greeting{font-size:13px;color:#666}
+.badge{font-size:11px;font-weight:600;padding:2px 10px;border-radius:4px;color:#fff}
+.user-badge{background:#2563eb}
+.hosp-badge{background:#16a34a}
+.admin-badge{background:#9333ea}
 
 /* ── Buttons ── */
 .btn-text{background:none;border:1px solid #d0d0d0;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:#333;transition:background .15s}
@@ -18,12 +27,11 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f4f5f
 .btn-secondary{background:#fff;color:#333;border:1px solid #d0d0d0;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px}
 .btn-danger{background:#ef4444;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
 .btn-danger:hover{background:#dc2626}
-.btn-sm{padding:4px 12px;font-size:12px}
-.btn-edit{background:none;border:1px solid #d0d0d0;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:13px}
-.btn-delete{background:#ef4444;color:#fff;border:none;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+.btn-block{display:block;width:100%}
+.btn-sm{padding:5px 12px;font-size:12px}
 
 /* ── Tabs ── */
-.tabs{display:flex;gap:4px;padding:12px 24px;background:#fff;border-bottom:1px solid #e2e4e9}
+.tabs{display:flex;gap:4px;padding:12px 24px;background:#fff;border-bottom:1px solid #e2e4e9;flex-wrap:wrap}
 .tab{padding:8px 18px;border:none;border-radius:6px;background:none;cursor:pointer;font-size:14px;font-weight:500;color:#555;transition:all .15s}
 .tab:hover{background:#f0f0f0}
 .tab.active{background:#2563eb;color:#fff}
@@ -32,104 +40,226 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f4f5f
 .tab-content{display:none;padding:20px 24px;flex:1}
 .tab-content.active{display:block}
 
+/* ── Section header ── */
+.section-header{margin-bottom:16px}
+.section-header h2{font-size:18px;margin-bottom:4px}
+
+/* ── Cards ── */
+.card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:14px}
+.card h3{font-size:15px;margin-bottom:10px}
+
+/* ── Alerts ── */
+.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px}
+.alert-error{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.alert-success{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+.alert-warning{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
+
+/* ── Muted ── */
+.muted{font-size:13px;color:#999}
+.no-results{text-align:center;padding:60px 20px;color:#999;font-size:15px}
+
+/* ── Forms ── */
+.form-row{display:flex;gap:10px;margin-bottom:10px}
+.form-group{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.form-group.flex-1{flex:1}
+.form-group label{font-size:12px;font-weight:600;color:#555}
+.form-group input,.form-group select,.form-group textarea{padding:8px 10px;border:1px solid #d0d0d0;border-radius:6px;font-size:13px;font-family:inherit}
+.form-group textarea{resize:vertical}
+hr{border:none;border-top:1px solid #e8e8ec}
+
 /* ── Filters ── */
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
 .filters select,.filters input{padding:8px 12px;border:1px solid #d0d0d0;border-radius:6px;font-size:14px;background:#fff}
 .filters select{min-width:140px}
 .filters input{flex:1;min-width:160px}
 
-/* ── Cards ── */
-.card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:20px;margin-bottom:16px}
-.card h2{font-size:16px;margin-bottom:14px}
+/* ═══════════════════════════════════════════
+   AUTH PAGE
+   ═══════════════════════════════════════════ */
+.auth-page{align-items:center;justify-content:center;background:linear-gradient(135deg,#f8fafc 0%,#e8edf5 100%)}
+.auth-container{width:100%;max-width:420px;padding:20px}
+.auth-brand{text-align:center;margin-bottom:24px}
+.logo-lg{font-size:48px;display:block;margin-bottom:8px}
+.auth-brand h1{font-size:22px;font-weight:700}
+.auth-card{background:#fff;border:1px solid #e2e4e9;border-radius:12px;padding:24px}
+.auth-card h2{font-size:18px;margin-bottom:16px}
+.auth-switch{text-align:center;margin-top:14px;font-size:13px;color:#888}
 
-/* ── Hospital Result Card ── */
+.demo-creds{margin-top:20px;padding-top:16px;border-top:1px solid #e8e8ec}
+.demo-creds h4{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.cred{font-size:12px;padding:6px 8px;background:#fafafa;border-radius:4px;margin-bottom:4px;cursor:pointer;transition:background .15s;color:#555}
+.cred:hover{background:#f0f0f0}
+.cred-role{display:inline-block;padding:1px 6px;border-radius:3px;color:#fff;font-size:10px;font-weight:600;margin-right:6px}
+.cred-role.admin{background:#9333ea}
+.cred-role.hospital{background:#16a34a}
+.cred-role.user{background:#2563eb}
+
+/* ═══════════════════════════════════════════
+   BLOOD BADGES
+   ═══════════════════════════════════════════ */
+.blood-badge{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.blood-badge.sm{width:28px;height:28px;font-size:10px}
+.blood-badge.Aplus{background:#ef4444}.blood-badge.Aminus{background:#f87171}
+.blood-badge.Bplus{background:#f472b6}.blood-badge.Bminus{background:#ec4899}
+.blood-badge.ABplus{background:#a78bfa}.blood-badge.ABminus{background:#8b5cf6}
+.blood-badge.Oplus{background:#f59e0b}.blood-badge.Ominus{background:#eab308}
+
+/* ── Blood Summary Grid ── */
+.blood-summary{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.summary-card{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e4e9;border-radius:8px;padding:12px 14px}
+.summary-card.available{border-left:3px solid #16a34a}
+.summary-card.empty{border-left:3px solid #d0d0d0;opacity:.6}
+.summary-info{display:flex;flex-direction:column}
+.summary-units{font-size:15px;font-weight:700}
+.summary-providers{font-size:11px;color:#999}
+
+/* ── Hospital Cards ── */
 .hospital-card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:20px;margin-bottom:16px}
 .hospital-header{display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap}
 .hospital-header h3{font-size:17px;font-weight:700;margin:0}
 .type-badge{font-size:11px;background:#f0f0f0;color:#555;padding:2px 8px;border-radius:4px;font-weight:600}
 .hospital-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#666;margin-bottom:14px}
 .hospital-meta span{display:flex;align-items:center;gap:4px}
-.blood-list{display:flex;gap:12px;flex-wrap:wrap}
-
-/* ── Blood Badge ── */
-.blood-item{display:flex;align-items:center;gap:12px;background:#fafafa;border:1px solid #e8e8ec;border-radius:8px;padding:10px 16px;min-width:200px}
-.blood-badge{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
-.blood-badge.Aplus{background:#ef4444}.blood-badge.Aminus{background:#f87171}
-.blood-badge.Bplus{background:#f472b6}.blood-badge.Bminus{background:#ec4899}
-.blood-badge.ABplus{background:#a78bfa}.blood-badge.ABminus{background:#8b5cf6}
-.blood-badge.Oplus{background:#f59e0b}.blood-badge.Ominus{background:#eab308}
+.blood-list{display:flex;gap:10px;flex-wrap:wrap}
+.blood-item{display:flex;align-items:center;gap:10px;background:#fafafa;border:1px solid #e8e8ec;border-radius:8px;padding:10px 14px;min-width:200px}
+.blood-item.compact{min-width:auto;padding:6px 10px;font-size:13px}
 .blood-info{display:flex;flex-direction:column}
 .blood-info .units{font-size:14px;font-weight:600}
 .blood-info .updated{font-size:11px;color:#999}
 .blood-price{margin-left:auto;font-size:14px;font-weight:600;color:#333;white-space:nowrap}
-.blood-details{font-size:12px;color:#2563eb;cursor:pointer;text-decoration:underline;margin-left:8px}
 
-/* ── Manage Layout ── */
-.manage-layout{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
-@media(max-width:900px){.manage-layout{grid-template-columns:1fr}}
+/* ═══════════════════════════════════════════
+   USER APP – Order
+   ═══════════════════════════════════════════ */
+.order-layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
+@media(max-width:800px){.order-layout{grid-template-columns:1fr}}
+.order-card{max-width:none}
+.info-card h3{font-size:14px;margin-bottom:10px}
+.how-it-works{padding-left:18px;font-size:13px;color:#555;line-height:1.8}
 
-.manage-card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:18px;margin-bottom:14px}
-.manage-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.manage-card-header h3{font-size:16px;font-weight:700;margin:0}
-.manage-card-actions{display:flex;gap:6px}
-.manage-blood-list{display:flex;gap:10px;flex-wrap:wrap}
-.manage-blood-item{background:#fff;border:1px solid #e2e4e9;border-radius:8px;padding:10px 14px;min-width:120px;text-align:center}
-.manage-blood-item .badge-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.manage-blood-item .mb-label{font-size:12px;color:#888}
-.manage-blood-item .mb-value{font-size:14px;font-weight:600}
-.manage-blood-item .mb-time{font-size:11px;color:#aaa}
+/* ── Order status cards ── */
+.order-status-card{border-left:3px solid #2563eb}
+.order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.order-header>div{display:flex;align-items:center;gap:8px}
+.order-details{font-size:13px;line-height:1.8;color:#555}
+.order-details .label{font-weight:600;color:#333}
+.order-actions{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0}
 
-/* ── Form ── */
-.form-card{position:sticky;top:20px}
-.form-card h2{font-size:15px;margin-bottom:16px}
-.form-row{display:flex;gap:10px;margin-bottom:10px}
-.form-group{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}
-.form-group.flex-1{flex:1}
-.form-group label{font-size:12px;font-weight:600;color:#555}
-.form-group input,.form-group select{padding:7px 10px;border:1px solid #d0d0d0;border-radius:6px;font-size:13px}
+/* ── Status badges ── */
+.status-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;text-transform:uppercase}
+.status-badge.sm{font-size:10px;padding:2px 6px}
+.status-pending{background:#fef3c7;color:#d97706}
+.status-confirmed{background:#dbeafe;color:#2563eb}
+.status-sampling{background:#ede9fe;color:#7c3aed}
+.status-tested{background:#d1fae5;color:#059669}
+.status-delivered{background:#ecfdf5;color:#047857}
+.status-rejected{background:#fee2e2;color:#dc2626}
 
-.inventory-header{display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px}
-.inventory-header h3{font-size:14px;font-weight:600}
-.inv-line{display:flex;gap:8px;align-items:center;margin-bottom:6px}
-.inv-line select,.inv-line input{padding:6px 8px;border:1px solid #d0d0d0;border-radius:5px;font-size:13px}
-.inv-line select{width:80px}
-.inv-line input{width:70px}
-.inv-line .btn-remove{background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:2px 6px}
-.muted{font-size:13px;color:#999}
+/* ── Order Timeline ── */
+.order-timeline{margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0}
+.order-timeline h4{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.timeline-item{display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;color:#555}
+.timeline-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.timeline-dot.status-pending{background:#d97706}
+.timeline-dot.status-confirmed{background:#2563eb}
+.timeline-dot.status-sampling{background:#7c3aed}
+.timeline-dot.status-tested{background:#059669}
+.timeline-dot.status-delivered{background:#047857}
+.timeline-dot.status-rejected{background:#dc2626}
+.timeline-status{font-weight:600;min-width:70px}
+.timeline-time{color:#999}
+.timeline-note{color:#888}
 
-.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+/* ═══════════════════════════════════════════
+   HOSPITAL APP
+   ═══════════════════════════════════════════ */
 
-/* ── Admin ── */
-.admin-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-@media(max-width:700px){.admin-layout{grid-template-columns:1fr}}
-.admin-layout .card h2{margin-bottom:12px}
-.admin-layout .form-group{margin-bottom:12px}
-.admin-layout .form-group input{width:100%;padding:8px 12px;border:1px solid #d0d0d0;border-radius:6px;font-size:14px}
-.admin-layout .btn-danger{margin-top:8px}
+/* Inventory grid */
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.inv-card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:14px;text-align:center}
+.inv-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.btn-remove-stock{background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;transition:color .15s}
+.btn-remove-stock:hover{color:#ef4444}
+.inv-stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+.inv-label{color:#888}
+.inv-value{font-weight:600}
+.inv-updated{font-size:11px;color:#bbb;margin-top:6px}
 
-/* ── Footer ── */
+/* Subscription plans */
+.sub-plans{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin-top:16px}
+.plan-card{text-align:center;padding:24px}
+.plan-card.featured{border:2px solid #2563eb;box-shadow:0 4px 12px rgba(37,99,235,.1)}
+.plan-price{font-size:28px;font-weight:700;color:#1e1e2f;margin:10px 0}
+.plan-price span{font-size:14px;font-weight:400;color:#888}
+.plan-card ul{list-style:none;text-align:left;margin:16px 0;font-size:13px;color:#555}
+.plan-card ul li{padding:6px 0;border-bottom:1px solid #f5f5f5}
+.plan-card ul li::before{content:"\\2713 ";color:#16a34a;font-weight:700}
+.sub-active-card{border-left:3px solid #16a34a}
+.sub-detail{font-size:14px;padding:4px 0}
+
+/* ═══════════════════════════════════════════
+   ADMIN APP
+   ═══════════════════════════════════════════ */
+
+/* Stats grid */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.stat-card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:18px;text-align:center}
+.stat-number{font-size:24px;font-weight:700;color:#1e1e2f}
+.stat-label{font-size:12px;color:#888;margin-top:4px}
+
+/* Two-col layout */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.two-col{grid-template-columns:1fr}}
+
+/* Recent items */
+.recent-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px}
+.recent-name{font-weight:600;flex:1}
+.recent-time{color:#999;font-size:12px}
+
+/* Badge sm */
+.badge-sm{font-size:10px;padding:2px 6px;border-radius:3px;font-weight:600;color:#fff}
+.badge-sm.admin{background:#9333ea}
+.badge-sm.hospital{background:#16a34a}
+.badge-sm.user{background:#2563eb}
+.badge-sm.verified{background:#16a34a}
+.badge-sm.pending{background:#f59e0b}
+.badge-sm.sub-active{background:#2563eb}
+.badge-sm.no-sub{background:#d0d0d0;color:#555}
+
+/* Data tables */
+.table-wrap{overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e2e4e9}
+.data-table th{background:#f8f9fa;padding:10px 14px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #e2e4e9}
+.data-table td{padding:10px 14px;border-bottom:1px solid #f5f5f5}
+.data-table tr:hover td{background:#fafafa}
+
+/* Revenue banner */
+.revenue-banner{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:14px 18px;font-size:15px;color:#0369a1;margin-bottom:16px}
+
+/* Hospital admin card */
+.hosp-admin-card{border-left:3px solid #e2e4e9}
+.hosp-admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px}
+.hosp-admin-header>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.hosp-admin-header h3{font-size:16px;margin:0}
+
+/* ═══════════════════════════════════════════
+   Footer
+   ═══════════════════════════════════════════ */
 footer{text-align:center;padding:16px;font-size:13px;color:#888;border-top:1px solid #e8e8ec;background:#fff;margin-top:auto}
 
-/* ── No results ── */
-.no-results{text-align:center;padding:60px 20px;color:#999;font-size:15px}
-
-/* ── Detail Modal ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
-.modal-overlay.open{display:flex}
-.modal{background:#fff;border-radius:12px;padding:24px;max-width:420px;width:90%;max-height:80vh;overflow-y:auto}
-.modal h3{margin-bottom:12px;font-size:17px}
-.modal .detail-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:14px}
-.modal .detail-label{color:#888}
-.modal .detail-value{font-weight:600}
-.modal-actions{display:flex;justify-content:flex-end;margin-top:16px}
-
-/* ── Responsive ── */
+/* ═══════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════ */
 @media(max-width:600px){
   .topbar{padding:10px 14px}
-  .tabs{padding:10px 14px}
+  .tabs{padding:10px 14px;gap:2px}
+  .tab{padding:6px 12px;font-size:13px}
   .tab-content{padding:14px}
   .filters{flex-direction:column}
   .blood-list{flex-direction:column}
   .blood-item{min-width:auto}
   .form-row{flex-direction:column}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .blood-summary{grid-template-columns:repeat(2,1fr)}
 }

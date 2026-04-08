@@ -3,147 +3,186 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blood Bank Finder</title>
+  <title>Blood Bank Platform – Login</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-  <header class="topbar">
-    <div class="topbar-left">
-      <span class="logo">&#x1FA78;</span>
-      <h1 id="appName">Blood Bank Finder</h1>
-      <span class="badge-mvp">MVP</span>
+<body class="auth-page">
+
+  <div class="auth-container">
+    <div class="auth-brand">
+      <span class="logo-lg">&#x1FA78;</span>
+      <h1>Blood Bank Platform</h1>
+      <p class="muted">Connecting donors, hospitals &amp; patients</p>
     </div>
-    <div class="topbar-right">
-      <button class="btn-text" id="btnExport" onclick="exportData()">Export</button>
-      <button class="btn-text" id="btnImport" onclick="document.getElementById('importFile').click()">Import</button>
-      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
-    </div>
-  </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="find" onclick="switchTab('find')">Find Blood</button>
-    <button class="tab" data-tab="manage" onclick="switchTab('manage')">Manage Hospitals</button>
-    <button class="tab" data-tab="admin" onclick="switchTab('admin')">Admin</button>
-  </nav>
+    <!-- LOGIN FORM -->
+    <div class="auth-card" id="loginCard">
+      <h2>Sign In</h2>
+      <div id="loginError" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Your password">
+      </div>
+      <button class="btn-primary btn-block" onclick="handleLogin()">Sign In</button>
+      <p class="auth-switch">Don't have an account? <a href="#" onclick="showRegister()">Register</a></p>
 
-  <!-- ==================== FIND BLOOD TAB ==================== -->
-  <main id="tab-find" class="tab-content active">
-    <div class="filters">
-      <select id="filterGroup">
-        <option value="">Any group</option>
-        <option>A+</option><option>A-</option>
-        <option>B+</option><option>B-</option>
-        <option>AB+</option><option>AB-</option>
-        <option>O+</option><option>O-</option>
-      </select>
-      <input type="text" id="filterCity" placeholder="City (e.g., Mumbai)">
-      <input type="text" id="filterPin" placeholder="PIN code (optional)">
-      <input type="text" id="filterName" placeholder="Hospital / Blood bank name">
-      <button class="btn-text" onclick="clearFilters()">Clear</button>
-    </div>
-    <div id="searchResults"></div>
-  </main>
-
-  <!-- ==================== MANAGE HOSPITALS TAB ==================== -->
-  <main id="tab-manage" class="tab-content">
-    <div class="manage-layout">
-      <div class="manage-list" id="manageList"></div>
-      <div class="manage-form-wrap">
-        <div class="card form-card">
-          <h2 id="formTitle">&#x2795; Add Hospital / Blood Bank</h2>
-          <input type="hidden" id="editId">
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label>Name*</label>
-              <input type="text" id="fName" placeholder="e.g., Sunrise Blood Centre">
-            </div>
-            <div class="form-group">
-              <label>Type</label>
-              <select id="fType">
-                <option>Blood Bank</option>
-                <option>Hospital</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label>Contact Person</label>
-              <input type="text" id="fContact" placeholder="Name of in-charge">
-            </div>
-            <div class="form-group flex-1">
-              <label>Mobile</label>
-              <input type="text" id="fMobile" placeholder="+91 ...">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label>Landline</label>
-              <input type="text" id="fLandline" placeholder="e.g., 022-xxxx-yyyy">
-            </div>
-            <div class="form-group flex-1">
-              <label>Hours</label>
-              <input type="text" id="fHours" placeholder="24x7">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label>Address</label>
-              <input type="text" id="fAddress" placeholder="Street & Area">
-            </div>
-            <div class="form-group flex-1">
-              <label>City*</label>
-              <input type="text" id="fCity" placeholder="City">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>PIN code</label>
-              <input type="text" id="fPin" placeholder="6 digits" maxlength="6">
-            </div>
-          </div>
-
-          <div class="inventory-header">
-            <h3>Inventory</h3>
-            <button class="btn-text" onclick="addInventoryLine()">Add line</button>
-          </div>
-          <div id="inventoryLines"></div>
-          <p id="noInventory" class="muted">No lines yet. Add blood groups and quantities.</p>
-
-          <div class="form-actions">
-            <button class="btn-secondary" id="btnCancelEdit" onclick="cancelEdit()" style="display:none">Cancel</button>
-            <button class="btn-primary" onclick="saveHospital()">Save</button>
-          </div>
-        </div>
+      <div class="demo-creds">
+        <h4>Demo Accounts</h4>
+        <div class="cred" onclick="fillCred('admin@bloodbank.com','admin123')"><span class="cred-role admin">Admin</span> admin@bloodbank.com / admin123</div>
+        <div class="cred" onclick="fillCred('citycare@hospital.com','hosp123')"><span class="cred-role hospital">Hospital</span> citycare@hospital.com / hosp123</div>
+        <div class="cred" onclick="fillCred('rupesh@gmail.com','user123')"><span class="cred-role user">User</span> rupesh@gmail.com / user123</div>
       </div>
     </div>
-  </main>
 
-  <!-- ==================== ADMIN TAB ==================== -->
-  <main id="tab-admin" class="tab-content">
-    <div class="admin-layout">
-      <div class="card">
-        <h2>&#x1FA78; Admin Settings</h2>
+    <!-- REGISTER FORM -->
+    <div class="auth-card" id="registerCard" style="display:none">
+      <h2>Create Account</h2>
+      <div id="regError" class="alert alert-error" style="display:none"></div>
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="regName" placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" id="regPhone" placeholder="+91 ...">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select id="regRole" onchange="toggleHospitalFields()">
+          <option value="user">Retail User</option>
+          <option value="hospital">Hospital / Blood Bank</option>
+        </select>
+      </div>
+
+      <!-- Hospital-specific fields -->
+      <div id="hospitalFields" style="display:none">
         <div class="form-group">
-          <label>Organisation / App name</label>
-          <input type="text" id="adminAppName" placeholder="Blood Bank Finder">
+          <label>Hospital / Blood Bank Name</label>
+          <input type="text" id="regHospName" placeholder="e.g., Sunrise Blood Centre">
         </div>
         <div class="form-group">
-          <label>Public notice (footer)</label>
-          <input type="text" id="adminNotice" placeholder="Public demo – verify details with the provider.">
+          <label>Type</label>
+          <select id="regHospType"><option>Hospital</option><option>Blood Bank</option></select>
         </div>
-        <button class="btn-danger" onclick="resetDemoData()">Reset demo data</button>
+        <div class="form-group">
+          <label>City</label>
+          <input type="text" id="regHospCity" placeholder="City">
+        </div>
+        <div class="form-group">
+          <label>Address</label>
+          <input type="text" id="regHospAddress" placeholder="Full address">
+        </div>
       </div>
-      <div class="card">
-        <h2>&#x1F3E0; About this Admin</h2>
-        <p>Pages: <strong>Find Blood</strong> (public search), <strong>Manage Hospitals</strong> (inventory CRUD), <strong>Admin</strong> (basic settings).</p>
-      </div>
-    </div>
-  </main>
 
-  <footer id="appFooter">
-    <span>&#x26A0;</span> <span id="footerText">Demo app. Always verify availability with the provider. Prices are handled by providers directly.</span>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPassword" placeholder="Min 6 characters">
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="regConfirm" placeholder="Repeat password">
+      </div>
+      <button class="btn-primary btn-block" onclick="handleRegister()">Create Account</button>
+      <p class="auth-switch">Already have an account? <a href="#" onclick="showLogin()">Sign In</a></p>
+    </div>
+  </div>
+
+  <footer>
+    <span>&#x26A0;</span> Demo app. Always verify availability with the provider.
   </footer>
 
-  <script src="js/app.js"></script>
+  <script src="js/data.js"></script>
+  <script>
+    // Redirect if already logged in
+    (function() {
+      const s = getSession();
+      if (s) {
+        if (s.role === 'admin') window.location.href = 'admin.html';
+        else if (s.role === 'hospital') window.location.href = 'hospital.html';
+        else window.location.href = 'user.html';
+      }
+    })();
+
+    function showLogin() { $('loginCard').style.display = ''; $('registerCard').style.display = 'none'; }
+    function showRegister() { $('loginCard').style.display = 'none'; $('registerCard').style.display = ''; }
+
+    function toggleHospitalFields() {
+      $('hospitalFields').style.display = $('regRole').value === 'hospital' ? '' : 'none';
+    }
+
+    function fillCred(email, pass) {
+      $('loginEmail').value = email;
+      $('loginPassword').value = pass;
+    }
+
+    function handleLogin() {
+      const email = $('loginEmail').value.trim();
+      const password = $('loginPassword').value;
+      if (!email || !password) { showError('loginError', 'Enter email and password.'); return; }
+      const res = login(email, password);
+      if (!res.ok) { showError('loginError', res.msg); return; }
+      if (res.user.role === 'admin') window.location.href = 'admin.html';
+      else if (res.user.role === 'hospital') window.location.href = 'hospital.html';
+      else window.location.href = 'user.html';
+    }
+
+    function handleRegister() {
+      const name = $('regName').value.trim();
+      const email = $('regEmail').value.trim();
+      const phone = $('regPhone').value.trim();
+      const role = $('regRole').value;
+      const password = $('regPassword').value;
+      const confirm = $('regConfirm').value;
+
+      if (!name || !email || !password) { showError('regError', 'Fill in all required fields.'); return; }
+      if (password.length < 6) { showError('regError', 'Password must be at least 6 characters.'); return; }
+      if (password !== confirm) { showError('regError', 'Passwords do not match.'); return; }
+
+      const res = registerUser({ name, email, phone, role, password });
+      if (!res.ok) { showError('regError', res.msg); return; }
+
+      // If hospital role, also register hospital profile
+      if (role === 'hospital') {
+        const hName = $('regHospName').value.trim();
+        const hCity = $('regHospCity').value.trim();
+        if (!hName || !hCity) { showError('regError', 'Hospital name and city are required.'); return; }
+        registerHospital({
+          userId: res.user.id,
+          name: hName,
+          type: $('regHospType').value,
+          city: hCity,
+          address: $('regHospAddress').value.trim(),
+          phone: phone,
+          contactPerson: name
+        });
+      }
+
+      alert('Account created! Please sign in.');
+      showLogin();
+    }
+
+    function showError(id, msg) {
+      const el = $(id);
+      el.textContent = msg;
+      el.style.display = '';
+      setTimeout(() => el.style.display = 'none', 4000);
+    }
+
+    // Enter key support
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        if ($('loginCard').style.display !== 'none') handleLogin();
+        else handleRegister();
+      }
+    });
+  </script>
 </body>
 </html>
