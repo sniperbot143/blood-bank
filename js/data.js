@@ -136,6 +136,97 @@ function getActiveSubscription(hospitalId) {
 }
 
 // ═══════════════════════════════════════════
+//   CITY COORDS & DISTANCE
+// ═══════════════════════════════════════════
+const CITY_COORDS = {
+  'mumbai': { lat: 19.0760, lng: 72.8777 },
+  'delhi': { lat: 28.7041, lng: 77.1025 },
+  'new delhi': { lat: 28.6139, lng: 77.2090 },
+  'pune': { lat: 18.5204, lng: 73.8567 },
+  'bangalore': { lat: 12.9716, lng: 77.5946 },
+  'bengaluru': { lat: 12.9716, lng: 77.5946 },
+  'chennai': { lat: 13.0827, lng: 80.2707 },
+  'kolkata': { lat: 22.5726, lng: 88.3639 },
+  'hyderabad': { lat: 17.3850, lng: 78.4867 },
+  'ahmedabad': { lat: 23.0225, lng: 72.5714 },
+  'jaipur': { lat: 26.9124, lng: 75.7873 },
+  'lucknow': { lat: 26.8467, lng: 80.9462 },
+  'surat': { lat: 21.1702, lng: 72.8311 },
+  'kanpur': { lat: 26.4499, lng: 80.3319 },
+  'nagpur': { lat: 21.1458, lng: 79.0882 },
+  'indore': { lat: 22.7196, lng: 75.8577 },
+  'thane': { lat: 19.2183, lng: 72.9781 },
+  'bhopal': { lat: 23.2599, lng: 77.4126 },
+  'visakhapatnam': { lat: 17.6868, lng: 83.2185 },
+  'patna': { lat: 25.5941, lng: 85.1376 },
+  'vadodara': { lat: 22.3072, lng: 73.1812 },
+  'ghaziabad': { lat: 28.6692, lng: 77.4538 },
+  'ludhiana': { lat: 30.9010, lng: 75.8573 },
+  'agra': { lat: 27.1767, lng: 78.0081 },
+  'nashik': { lat: 19.9975, lng: 73.7898 },
+  'faridabad': { lat: 28.4089, lng: 77.3178 },
+  'meerut': { lat: 28.9845, lng: 77.7064 },
+  'rajkot': { lat: 22.3039, lng: 70.8022 },
+  'varanasi': { lat: 25.3176, lng: 82.9739 },
+  'amritsar': { lat: 31.6340, lng: 74.8723 },
+  'allahabad': { lat: 25.4358, lng: 81.8463 },
+  'prayagraj': { lat: 25.4358, lng: 81.8463 },
+  'ranchi': { lat: 23.3441, lng: 85.3096 },
+  'coimbatore': { lat: 11.0168, lng: 76.9558 },
+  'jabalpur': { lat: 23.1815, lng: 79.9864 },
+  'gwalior': { lat: 26.2183, lng: 78.1828 },
+  'vijayawada': { lat: 16.5062, lng: 80.6480 },
+  'jodhpur': { lat: 26.2389, lng: 73.0243 },
+  'madurai': { lat: 9.9252, lng: 78.1198 },
+  'raipur': { lat: 21.2514, lng: 81.6296 },
+  'kota': { lat: 25.2138, lng: 75.8648 },
+  'chandigarh': { lat: 30.7333, lng: 76.7794 },
+  'guwahati': { lat: 26.1445, lng: 91.7362 },
+  'mysore': { lat: 12.2958, lng: 76.6394 },
+  'mysuru': { lat: 12.2958, lng: 76.6394 },
+  'gurgaon': { lat: 28.4595, lng: 77.0266 },
+  'gurugram': { lat: 28.4595, lng: 77.0266 },
+  'noida': { lat: 28.5355, lng: 77.3910 }
+};
+
+function getCityCoords(city) {
+  if (!city) return null;
+  return CITY_COORDS[city.trim().toLowerCase()] || null;
+}
+
+// Haversine distance in km
+function calcDistance(city1, city2) {
+  if (!city1 || !city2) return null;
+  if (city1.trim().toLowerCase() === city2.trim().toLowerCase()) return 0;
+  const c1 = getCityCoords(city1);
+  const c2 = getCityCoords(city2);
+  if (!c1 || !c2) return null;
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(c2.lat - c1.lat);
+  const dLng = toRad(c2.lng - c1.lng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(c1.lat)) * Math.cos(toRad(c2.lat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+// Format distance as a human label
+function formatDistance(km) {
+  if (km === null || km === undefined) return 'Distance unknown';
+  if (km === 0) return 'In your city';
+  if (km < 10) return 'Within 10 km';
+  if (km < 50) return 'Within 50 km';
+  if (km < 100) return 'Within 100 km';
+  if (km < 250) return 'Within 250 km';
+  if (km < 500) return 'Within 500 km';
+  if (km < 1000) return 'Within 1000 km';
+  return 'Over 1000 km';
+}
+
+// User saved location helpers
+function getUserLocation() { return localStorage.getItem('bb.userLocation') || ''; }
+function setUserLocation(city) { localStorage.setItem('bb.userLocation', city); }
+
+// ═══════════════════════════════════════════
 //   BLOOD INVENTORY
 // ═══════════════════════════════════════════
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -185,6 +276,61 @@ function getCollectiveInventory() {
   return result;
 }
 
+// Anonymous availability for users (no hospital names) – grouped by blood group with distance bands
+function getAnonymousAvailability(userCity) {
+  const hospitals = getHospitals().filter(h => h.verified);
+  const inv = getInventory();
+  const result = {};
+  BLOOD_GROUPS.forEach(g => {
+    result[g] = {
+      totalUnits: 0,
+      providerCount: 0,
+      nearestKm: null,
+      bands: {},      // { 'Within 10 km': { units, count, minPrice }, ... }
+      minPrice: null
+    };
+  });
+
+  hospitals.forEach(h => {
+    const sub = getActiveSubscription(h.id);
+    if (!sub) return;
+    const km = calcDistance(userCity, h.city);
+    const band = formatDistance(km);
+
+    const hInv = inv.filter(i => i.hospitalId === h.id && i.units > 0);
+    hInv.forEach(i => {
+      const r = result[i.group];
+      r.totalUnits += i.units;
+      r.providerCount += 1;
+      if (km !== null && (r.nearestKm === null || km < r.nearestKm)) r.nearestKm = km;
+      if (r.minPrice === null || i.pricePerUnit < r.minPrice) r.minPrice = i.pricePerUnit;
+      if (!r.bands[band]) r.bands[band] = { units: 0, count: 0, minPrice: null };
+      r.bands[band].units += i.units;
+      r.bands[band].count += 1;
+      if (r.bands[band].minPrice === null || i.pricePerUnit < r.bands[band].minPrice) r.bands[band].minPrice = i.pricePerUnit;
+    });
+  });
+  return result;
+}
+
+// Pick the best supplier hospital for a user order (nearest with enough stock)
+function pickBestSupplier(userCity, bloodGroup, unitsNeeded) {
+  const hospitals = getHospitals().filter(h => h.verified);
+  const inv = getInventory();
+  const candidates = [];
+  hospitals.forEach(h => {
+    const sub = getActiveSubscription(h.id);
+    if (!sub) return;
+    const stock = inv.find(i => i.hospitalId === h.id && i.group === bloodGroup);
+    if (!stock || stock.units < unitsNeeded) return;
+    const km = calcDistance(userCity, h.city);
+    candidates.push({ hospital: h, distance: km === null ? 99999 : km, price: stock.pricePerUnit });
+  });
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.distance - b.distance || a.price - b.price);
+  return candidates[0];
+}
+
 // ═══════════════════════════════════════════
 //   ORDERS
 // ═══════════════════════════════════════════
@@ -199,6 +345,7 @@ function placeOrder(data) {
     userId: data.userId,
     userName: data.userName,
     userPhone: data.userPhone,
+    userCity: data.userCity || '',
     bloodGroup: data.bloodGroup,
     unitsNeeded: data.unitsNeeded,
     patientName: data.patientName,
@@ -206,6 +353,7 @@ function placeOrder(data) {
     admittedHospitalName: data.admittedHospitalName,
     supplierHospitalId: data.supplierHospitalId,
     supplierHospitalName: data.supplierHospitalName,
+    distanceKm: data.distanceKm !== undefined ? data.distanceKm : null,
     status: 'pending',
     notes: data.notes || '',
     createdAt: now(),

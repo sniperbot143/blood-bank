@@ -130,6 +130,36 @@ hr{border:none;border-top:1px solid #e8e8ec}
 .blood-price{margin-left:auto;font-size:14px;font-weight:600;color:#333;white-space:nowrap}
 
 /* ═══════════════════════════════════════════
+   USER APP – Anonymous availability
+   ═══════════════════════════════════════════ */
+
+/* Location bar */
+.location-bar{display:flex;gap:12px;align-items:flex-end;padding:14px 18px}
+.location-bar .form-group{margin-bottom:0}
+.location-bar input{padding:8px 12px;border:1px solid #d0d0d0;border-radius:6px;font-size:14px;width:100%}
+
+/* Availability cards */
+.avail-card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:18px;margin-bottom:14px}
+.avail-card.available{border-left:4px solid #16a34a}
+.avail-card.empty{border-left:4px solid #d0d0d0;opacity:.55}
+.avail-head{display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap}
+.avail-title{flex:1}
+.avail-title h3{font-size:16px;font-weight:700;margin:0}
+.avail-sub{font-size:13px;color:#666}
+.avail-distance{font-size:12px;color:#2563eb;font-weight:600;background:#eff6ff;padding:4px 10px;border-radius:12px}
+
+.bands-list{margin:12px 0;border-top:1px solid #f0f0f0;padding-top:10px}
+.band-row{display:flex;align-items:center;gap:14px;padding:6px 0;font-size:13px;flex-wrap:wrap}
+.band-label{color:#555;flex:1;min-width:140px}
+.band-units{font-weight:600;color:#1e1e2f}
+.band-price{color:#888;font-size:12px}
+
+/* Order preview */
+.order-preview{padding:12px 14px;border-radius:6px;font-size:13px;margin:8px 0 14px;line-height:1.6}
+.order-preview.match{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.order-preview.no-match{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+
+/* ═══════════════════════════════════════════
    USER APP – Order
    ═══════════════════════════════════════════ */
 .order-layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   User App – Search blood, place orders
+   User App – Anonymous availability + auto supplier
    ═══════════════════════════════════════════ */
 
 const session = requireRole('user');
@@ -9,116 +9,140 @@ if (session) {
 }
 
 function init() {
-  renderSummary();
-  renderProviders();
-  populateOrderDropdowns();
+  // Populate city autocomplete
+  populateCityList();
+
+  // Load saved location
+  const savedCity = getUserLocation();
+  if (savedCity) {
+    $('userCity').value = savedCity;
+    $('oCity').value = savedCity;
+  }
+
   $('oPhone').value = session.phone || '';
-  $('filterGroup').addEventListener('change', renderProviders);
-  $('filterCity').addEventListener('input', renderProviders);
+  $('filterGroup').addEventListener('change', renderAvailability);
+  $('oGroup').addEventListener('change', updateOrderPreview);
+  $('oUnits').addEventListener('input', updateOrderPreview);
+  $('oCity').addEventListener('input', updateOrderPreview);
+
+  renderAvailability();
 }
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + name));
   if (name === 'myorders') renderMyOrders();
-  if (name === 'search') { renderSummary(); renderProviders(); }
+  if (name === 'search') renderAvailability();
 }
 
-// ═══════════════════════════════════════════
-//   SEARCH – Collective Blood Availability
-// ═══════════════════════════════════════════
+function populateCityList() {
+  const list = $('cityList');
+  list.innerHTML = Object.keys(CITY_COORDS)
+    .map(c => c.charAt(0).toUpperCase() + c.slice(1))
+    .map(c => `<option value="${c}">`).join('');
+}
 
 function badgeClass(g) { return g.replace('+','plus').replace('-','minus'); }
 
-function renderSummary() {
-  const coll = getCollectiveInventory();
-  $('bloodSummary').innerHTML = BLOOD_GROUPS.map(g => {
-    const d = coll[g];
-    return `
-      <div class="summary-card ${d.totalUnits > 0 ? 'available' : 'empty'}">
-        <div class="blood-badge ${badgeClass(g)}">${g}</div>
-        <div class="summary-info">
-          <span class="summary-units">${d.totalUnits} units</span>
-          <span class="summary-providers">${d.providers.length} provider${d.providers.length !== 1 ? 's' : ''}</span>
-        </div>
-      </div>`;
-  }).join('');
+function updateLocation() {
+  const city = $('userCity').value.trim();
+  setUserLocation(city);
+  $('oCity').value = city;
+  renderAvailability();
 }
 
-function renderProviders() {
-  const coll = getCollectiveInventory();
-  const groupFilter = $('filterGroup').value;
-  const cityFilter = $('filterCity').value.trim().toLowerCase();
+// ═══════════════════════════════════════════
+//   ANONYMOUS AVAILABILITY (no hospital names)
+// ═══════════════════════════════════════════
 
-  // Build a flat list of providers with their blood
-  let providers = [];
-  const hospitals = getHospitals().filter(h => h.verified);
+function renderAvailability() {
+  const userCity = $('userCity').value.trim() || getUserLocation();
+  const data = getAnonymousAvailability(userCity);
+  const filterG = $('filterGroup').value;
+  const groups = filterG ? [filterG] : BLOOD_GROUPS;
 
-  hospitals.forEach(h => {
-    const sub = getActiveSubscription(h.id);
-    if (!sub) return;
-    if (cityFilter && !h.city.toLowerCase().includes(cityFilter)) return;
+  const cards = groups.map(g => {
+    const d = data[g];
+    if (d.totalUnits === 0) {
+      return `
+        <div class="avail-card empty">
+          <div class="avail-head">
+            <div class="blood-badge ${badgeClass(g)}">${g}</div>
+            <div class="avail-title">
+              <h3>${g} Blood Group</h3>
+              <span class="avail-sub">Currently unavailable</span>
+            </div>
+          </div>
+        </div>`;
+    }
 
-    const inv = getInventoryByHospital(h.id).filter(i => i.units > 0);
-    const filtered = groupFilter ? inv.filter(i => i.group === groupFilter) : inv;
-    if (!filtered.length) return;
+    // Build distance bands list
+    const bandOrder = ['In your city', 'Within 10 km', 'Within 50 km', 'Within 100 km', 'Within 250 km', 'Within 500 km', 'Within 1000 km', 'Over 1000 km', 'Distance unknown'];
+    const bandsHtml = bandOrder
+      .filter(b => d.bands[b])
+      .map(b => `
+        <div class="band-row">
+          <span class="band-label">&#x1F4CD; ${b}</span>
+          <span class="band-units">${d.bands[b].units} unit${d.bands[b].units !== 1 ? 's' : ''}</span>
+          ${d.bands[b].minPrice !== null ? `<span class="band-price">from &#x20B9;${Number(d.bands[b].minPrice).toLocaleString('en-IN')}/unit</span>` : ''}
+        </div>`).join('');
 
-    providers.push({ hospital: h, inventory: filtered });
-  });
+    const distLabel = userCity
+      ? (d.nearestKm !== null ? `Nearest: ${d.nearestKm === 0 ? 'In your city' : d.nearestKm + ' km away'}` : 'Distance unknown')
+      : 'Set your location to see distance';
 
-  if (!providers.length) {
-    $('providerList').innerHTML = '<div class="no-results">No blood available matching your filters.</div>';
+    return `
+      <div class="avail-card available">
+        <div class="avail-head">
+          <div class="blood-badge ${badgeClass(g)}">${g}</div>
+          <div class="avail-title">
+            <h3>${g} Blood Group</h3>
+            <span class="avail-sub"><strong>${d.totalUnits} units</strong> available &middot; from &#x20B9;${Number(d.minPrice).toLocaleString('en-IN')}/unit</span>
+          </div>
+          <div class="avail-distance">${distLabel}</div>
+        </div>
+        <div class="bands-list">${bandsHtml}</div>
+        <button class="btn-primary btn-sm" onclick="quickOrder('${g}')">Order ${g}</button>
+      </div>`;
+  }).join('');
+
+  $('availabilityList').innerHTML = cards || '<div class="no-results">No blood available right now.</div>';
+}
+
+function quickOrder(group) {
+  switchTab('order');
+  $('oGroup').value = group;
+  updateOrderPreview();
+}
+
+// ═══════════════════════════════════════════
+//   ORDER – Auto supplier matching
+// ═══════════════════════════════════════════
+
+function updateOrderPreview() {
+  const group = $('oGroup').value;
+  const units = parseInt($('oUnits').value) || 0;
+  const city = $('oCity').value.trim();
+  const preview = $('orderPreview');
+
+  if (!group || !units || !city) { preview.style.display = 'none'; return; }
+
+  const match = pickBestSupplier(city, group, units);
+  if (!match) {
+    preview.style.display = '';
+    preview.className = 'order-preview no-match';
+    preview.innerHTML = `&#x26A0; No blood bank currently has ${units} unit(s) of ${group} available. You can still place the order and we will try to arrange it.`;
     return;
   }
 
-  $('providerList').innerHTML = providers.map(p => `
-    <div class="hospital-card">
-      <div class="hospital-header">
-        <h3>${esc(p.hospital.name)}</h3>
-        <span class="type-badge">${esc(p.hospital.type || 'Hospital')}</span>
-      </div>
-      <div class="hospital-meta">
-        <span>&#x1F4CD; ${esc(p.hospital.address || '')}, ${esc(p.hospital.city)}</span>
-        ${p.hospital.phone ? `<span>&#x1F4F1; ${esc(p.hospital.phone)}</span>` : ''}
-        ${p.hospital.hours ? `<span>&#x1F552; ${esc(p.hospital.hours)}</span>` : ''}
-      </div>
-      <div class="blood-list">
-        ${p.inventory.map(i => `
-          <div class="blood-item">
-            <div class="blood-badge ${badgeClass(i.group)}">${esc(i.group)}</div>
-            <div class="blood-info">
-              <span class="units">${i.units} units available</span>
-              <span class="updated">Updated ${timeAgo(i.updatedAt)}</span>
-            </div>
-            <span class="blood-price">&#x20B9;${Number(i.pricePerUnit).toLocaleString('en-IN')}/unit</span>
-          </div>`).join('')}
-      </div>
-      <div style="margin-top:12px">
-        <button class="btn-primary btn-sm" onclick="quickOrder('${p.hospital.id}','${esc(p.hospital.name)}')">Order from here</button>
-      </div>
-    </div>`).join('');
-}
-
-function quickOrder(hospId, hospName) {
-  switchTab('order');
-  $('oSupplier').value = hospId;
-}
-
-// ═══════════════════════════════════════════
-//   PLACE ORDER
-// ═══════════════════════════════════════════
-
-function populateOrderDropdowns() {
-  const allHospitals = getHospitals();
-  const verified = allHospitals.filter(h => h.verified && getActiveSubscription(h.id));
-
-  // Admitted hospital: can be any hospital (patient could be admitted anywhere)
-  $('oAdmittedHospital').innerHTML = '<option value="">Select hospital</option>' +
-    allHospitals.map(h => `<option value="${h.id}">${esc(h.name)} – ${esc(h.city)}</option>`).join('');
-
-  // Supplier: only verified hospitals with active subscription
-  $('oSupplier').innerHTML = '<option value="">Select blood bank / hospital</option>' +
-    verified.map(h => `<option value="${h.id}">${esc(h.name)} – ${esc(h.city)}</option>`).join('');
+  const distLabel = match.distance === 0 ? 'in your city' : (match.distance + ' km away');
+  const total = match.price * units;
+  preview.style.display = '';
+  preview.className = 'order-preview match';
+  preview.innerHTML = `
+    &#x2705; <strong>${units} unit(s)</strong> of <strong>${group}</strong> available <strong>${distLabel}</strong><br>
+    Estimated cost: <strong>&#x20B9;${total.toLocaleString('en-IN')}</strong> (&#x20B9;${match.price.toLocaleString('en-IN')}/unit)
+  `;
 }
 
 function handlePlaceOrder() {
@@ -126,44 +150,50 @@ function handlePlaceOrder() {
   const units = parseInt($('oUnits').value);
   const patient = $('oPatient').value.trim();
   const phone = $('oPhone').value.trim();
-  const admittedId = $('oAdmittedHospital').value;
-  const supplierId = $('oSupplier').value;
+  const city = $('oCity').value.trim();
+  const admittedName = $('oAdmittedHospital').value.trim();
 
-  if (!group || !units || !patient || !phone || !admittedId || !supplierId) {
+  if (!group || !units || !patient || !phone || !city || !admittedName) {
     showAlert('orderError', 'Please fill in all required fields.');
     return;
   }
 
-  const allH = getHospitals();
-  const admittedH = allH.find(h => h.id === admittedId);
-  const supplierH = allH.find(h => h.id === supplierId);
+  // Auto-pick best supplier (nearest with stock)
+  const match = pickBestSupplier(city, group, units);
 
   const order = placeOrder({
     userId: session.userId,
     userName: session.name,
     userPhone: phone,
+    userCity: city,
     bloodGroup: group,
     unitsNeeded: units,
     patientName: patient,
-    admittedHospitalId: admittedId,
-    admittedHospitalName: admittedH ? admittedH.name : '',
-    supplierHospitalId: supplierId,
-    supplierHospitalName: supplierH ? supplierH.name : '',
+    admittedHospitalId: '',                     // user-typed, not from list
+    admittedHospitalName: admittedName,
+    supplierHospitalId: match ? match.hospital.id : '',
+    supplierHospitalName: match ? match.hospital.name : 'Pending assignment',
+    distanceKm: match ? match.distance : null,
     notes: $('oNotes').value.trim()
   });
 
-  showAlert('orderSuccess', 'Order placed successfully! Order ID: ' + order.id + '. The hospital will coordinate blood sampling & testing.');
+  const distMsg = match
+    ? `Blood will be arranged from ${match.distance === 0 ? 'a provider in your city' : 'a provider ' + match.distance + ' km away'}.`
+    : 'We are searching for a provider with the requested blood.';
+
+  showAlert('orderSuccess', `Order placed! Order ID: ${order.id}. ${distMsg}`);
+
   // Reset form
   $('oPatient').value = '';
   $('oGroup').value = '';
   $('oUnits').value = '1';
   $('oAdmittedHospital').value = '';
-  $('oSupplier').value = '';
   $('oNotes').value = '';
+  $('orderPreview').style.display = 'none';
 }
 
 // ═══════════════════════════════════════════
-//   MY ORDERS
+//   MY ORDERS (no hospital names except admitted)
 // ═══════════════════════════════════════════
 
 function renderMyOrders() {
@@ -173,7 +203,11 @@ function renderMyOrders() {
     return;
   }
 
-  $('myOrdersList').innerHTML = orders.map(o => `
+  $('myOrdersList').innerHTML = orders.map(o => {
+    const distLabel = (o.distanceKm !== null && o.distanceKm !== undefined)
+      ? (o.distanceKm === 0 ? 'In your city' : o.distanceKm + ' km away')
+      : 'Distance pending';
+    return `
     <div class="card order-status-card">
       <div class="order-header">
         <div>
@@ -183,8 +217,8 @@ function renderMyOrders() {
         <span class="status-badge status-${o.status}">${o.status.toUpperCase()}</span>
       </div>
       <div class="order-details">
-        <div><span class="label">Admitted at:</span> ${esc(o.admittedHospitalName)}</div>
-        <div><span class="label">Blood from:</span> ${esc(o.supplierHospitalName)}</div>
+        <div><span class="label">Patient admitted at:</span> ${esc(o.admittedHospitalName)}</div>
+        <div><span class="label">Source:</span> ${distLabel}</div>
         <div><span class="label">Ordered:</span> ${fmtDate(o.createdAt)}</div>
         ${o.notes ? `<div><span class="label">Notes:</span> ${esc(o.notes)}</div>` : ''}
       </div>
@@ -198,13 +232,14 @@ function renderMyOrders() {
             ${h.note ? `<span class="timeline-note">– ${esc(h.note)}</span>` : ''}
           </div>`).join('')}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── Helpers ──
 function showAlert(id, msg) {
   const el = $(id);
-  el.textContent = msg;
+  el.innerHTML = msg;
   el.style.display = '';
-  setTimeout(() => el.style.display = 'none', 6000);
+  setTimeout(() => el.style.display = 'none', 7000);
 }

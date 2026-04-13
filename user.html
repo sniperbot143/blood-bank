@@ -28,26 +28,32 @@
   <!-- ═══ SEARCH TAB ═══ -->
   <main id="tab-search" class="tab-content active">
     <div class="section-header">
-      <h2>Blood Availability</h2>
-      <p class="muted">Collective inventory from all verified blood banks and hospitals</p>
+      <h2>Blood Availability Near You</h2>
+      <p class="muted">See available blood units and the distance they can be delivered from</p>
     </div>
 
-    <!-- Summary cards -->
-    <div class="blood-summary" id="bloodSummary"></div>
+    <!-- Location bar -->
+    <div class="location-bar card">
+      <div class="form-group" style="flex:1;margin:0">
+        <label>&#x1F4CD; Your Location (City)</label>
+        <input type="text" id="userCity" placeholder="e.g., Mumbai, Delhi, Pune..." list="cityList">
+        <datalist id="cityList"></datalist>
+      </div>
+      <button class="btn-primary" onclick="updateLocation()" style="align-self:flex-end">Update Location</button>
+    </div>
 
-    <!-- Filters -->
-    <div class="filters" style="margin-top:20px">
+    <!-- Filter -->
+    <div class="filters" style="margin-top:16px">
       <select id="filterGroup">
         <option value="">All blood groups</option>
         <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
         <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
       </select>
-      <input type="text" id="filterCity" placeholder="Filter by city...">
-      <button class="btn-text" onclick="$('filterGroup').value='';$('filterCity').value='';renderProviders()">Clear</button>
+      <button class="btn-text" onclick="$('filterGroup').value='';renderAvailability()">Clear</button>
     </div>
 
-    <!-- Provider list -->
-    <div id="providerList"></div>
+    <!-- Availability list -->
+    <div id="availabilityList"></div>
   </main>
 
   <!-- ═══ ORDER TAB ═══ -->
@@ -55,7 +61,7 @@
     <div class="order-layout">
       <div class="card order-card">
         <h2>&#x1FA78; Place Blood Order</h2>
-        <p class="muted">Fill in the details below. The hospital where your patient is admitted will coordinate with the blood bank for sampling and testing.</p>
+        <p class="muted">We will automatically arrange the nearest available blood for you. The hospital where your patient is admitted will coordinate sampling &amp; testing.</p>
         <div id="orderError" class="alert alert-error" style="display:none"></div>
         <div id="orderSuccess" class="alert alert-success" style="display:none"></div>
 
@@ -85,21 +91,19 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label>Hospital where patient is admitted *</label>
-          <select id="oAdmittedHospital">
-            <option value="">Select hospital</option>
-          </select>
-          <span class="muted" style="font-size:11px">This hospital will coordinate blood sampling & testing</span>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Your City *</label>
+            <input type="text" id="oCity" placeholder="e.g., Mumbai">
+          </div>
+          <div class="form-group flex-1">
+            <label>Hospital where patient is admitted *</label>
+            <input type="text" id="oAdmittedHospital" placeholder="Type the hospital name">
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Blood Bank / Supplier *</label>
-          <select id="oSupplier">
-            <option value="">Select blood bank / hospital</option>
-          </select>
-          <span class="muted" style="font-size:11px">Where the blood will be sourced from</span>
-        </div>
+        <!-- Live availability preview -->
+        <div id="orderPreview" class="order-preview" style="display:none"></div>
 
         <div class="form-group">
           <label>Notes (optional)</label>
@@ -112,12 +116,11 @@
       <div class="card info-card">
         <h3>How it works</h3>
         <ol class="how-it-works">
-          <li>Select the blood group and units needed</li>
-          <li>Choose the hospital where your patient is admitted</li>
-          <li>Choose a blood bank that has the required blood</li>
-          <li>Place the order – the admitted hospital receives notification</li>
-          <li>The hospital contacts the blood bank for sampling &amp; testing</li>
-          <li>Once tested and approved, blood is delivered to the patient</li>
+          <li>Enter the blood group and units needed</li>
+          <li>Provide your city &amp; the hospital where your patient is admitted</li>
+          <li>We auto-arrange the nearest blood bank with stock</li>
+          <li>Your hospital coordinates with the blood bank for sampling &amp; testing</li>
+          <li>Track delivery status in "My Orders"</li>
         </ol>
       </div>
     </div>
@@ -133,7 +136,7 @@
   </main>
 
   <footer>
-    <span>&#x26A0;</span> Demo app. Always verify availability with the provider. Prices are handled by providers directly.
+    <span>&#x26A0;</span> Demo app. Blood prices are managed by providers. Distances are approximate.
   </footer>
 
   <script src="js/data.js"></script>
