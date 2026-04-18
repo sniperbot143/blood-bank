@@ -105,6 +105,14 @@
         <!-- Live availability preview -->
         <div id="orderPreview" class="order-preview" style="display:none"></div>
 
+        <!-- Cost breakdown preview -->
+        <div id="costBreakdown" class="cost-breakdown" style="display:none">
+          <h4>Estimated Cost Breakdown</h4>
+          <div class="cost-rows" id="costRows"></div>
+          <div class="cost-total" id="costTotal"></div>
+          <p class="muted" style="margin-top:6px;font-size:11px">Final costs may vary. Testing &amp; transport fees depend on provider and distance.</p>
+        </div>
+
         <div class="form-group">
           <label>Notes (optional)</label>
           <textarea id="oNotes" rows="3" placeholder="Any special instructions, urgency level, etc."></textarea>
@@ -116,11 +124,16 @@
       <div class="card info-card">
         <h3>How it works</h3>
         <ol class="how-it-works">
-          <li>Enter the blood group and units needed</li>
-          <li>Provide your city &amp; the hospital where your patient is admitted</li>
-          <li>We auto-arrange the nearest blood bank with stock</li>
-          <li>Your hospital coordinates with the blood bank for sampling &amp; testing</li>
-          <li>Track delivery status in "My Orders"</li>
+          <li><strong>Select blood group</strong> &amp; units needed</li>
+          <li><strong>We match</strong> the nearest verified blood bank with stock</li>
+          <li><strong>Estimated costs breakdown:</strong><br>
+            Blood processing: &#x20B9;1,500–2,000/unit<br>
+            Sample testing: &#x20B9;200–500<br>
+            Medical transport: &#x20B9;150–300<br>
+            Coordination fee: &#x20B9;250</li>
+          <li><strong>Your hospital coordinates</strong> with the blood bank via medical courier for sampling &amp; testing</li>
+          <li><strong>Courier picks up</strong> tested blood and delivers to your hospital</li>
+          <li><strong>Track every step</strong> in "My Orders" – from confirmation to delivery</li>
         </ol>
       </div>
     </div>
@@ -136,7 +149,7 @@
   </main>
 
   <footer>
-    <span>&#x26A0;</span> Demo app. Blood prices are managed by providers. Distances are approximate.
+    <span>&#x26A0;</span> Demo platform. Dynamic pricing (blood/test/transport vary). Coordination model. Medical courier required.
   </footer>
 
   <script src="js/data.js"></script>

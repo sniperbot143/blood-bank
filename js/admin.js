@@ -156,10 +156,14 @@ function renderSubscriptions() {
 
   $('totalRevenue').innerHTML = `Total Revenue: <strong>&#x20B9;${totalRevenue.toLocaleString('en-IN')}</strong> from <strong>${subs.length}</strong> subscription(s)`;
 
+  const orders = getOrders();
   const tbody = document.querySelector('#subsTable tbody');
   tbody.innerHTML = subs.map(s => {
     const h = hospitals.find(h => h.id === s.hospitalId);
     const isActive = s.status === 'active' && s.expiresAt > Date.now();
+    // Estimate revenue from spread: coordination fee (250) * orders fulfilled by this hospital
+    const hospOrders = orders.filter(o => o.supplierHospitalId === s.hospitalId && (o.status === 'delivered' || o.status === 'tested'));
+    const spreadRevenue = hospOrders.length * 250;
     return `
     <tr>
       <td>${h ? esc(h.name) : 'Unknown'}</td>
@@ -168,6 +172,7 @@ function renderSubscriptions() {
       <td><span class="status-badge sm ${isActive ? 'status-confirmed' : 'status-rejected'}">${isActive ? 'Active' : 'Expired'}</span></td>
       <td>${fmtDate(s.startedAt)}</td>
       <td>${fmtDate(s.expiresAt)}</td>
+      <td>&#x20B9;${spreadRevenue.toLocaleString('en-IN')} (${hospOrders.length} order${hospOrders.length !== 1 ? 's' : ''})</td>
     </tr>`;
   }).join('');
 }

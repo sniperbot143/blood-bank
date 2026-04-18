@@ -78,7 +78,7 @@
     <div id="totalRevenue" class="revenue-banner"></div>
     <div class="table-wrap">
       <table class="data-table" id="subsTable">
-        <thead><tr><th>Hospital</th><th>Plan</th><th>Amount</th><th>Status</th><th>Started</th><th>Expires</th></tr></thead>
+        <thead><tr><th>Hospital</th><th>Plan</th><th>Amount</th><th>Status</th><th>Started</th><th>Expires</th><th>Est. Revenue from Spread</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -125,6 +125,17 @@
         <label>Organisation / App Name</label>
         <input type="text" id="settingsAppName" value="Blood Bank Platform">
       </div>
+      <h3 style="margin-top:20px;font-size:14px">Default Cost Ranges</h3>
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label>Default Test Cost Range</label>
+          <input type="text" id="settingsTestCost" value="&#x20B9;200–500">
+        </div>
+        <div class="form-group flex-1">
+          <label>Default Transport Fee</label>
+          <input type="text" id="settingsTransportFee" value="&#x20B9;150–300">
+        </div>
+      </div>
       <button class="btn-primary" onclick="saveAdminSettings()" style="margin-top:8px">Save</button>
       <hr style="margin:20px 0">
       <button class="btn-danger" onclick="handleResetData()">Reset All Demo Data</button>
@@ -133,7 +144,7 @@
   </main>
 
   <footer>
-    <span>&#x26A0;</span> Admin panel – Blood Bank Platform
+    <span>&#x26A0;</span> Demo platform. Dynamic pricing (blood/test/transport vary). Coordination model. Medical courier required.
   </footer>
 
   <script src="js/data.js"></script>

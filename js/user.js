@@ -124,25 +124,44 @@ function updateOrderPreview() {
   const units = parseInt($('oUnits').value) || 0;
   const city = $('oCity').value.trim();
   const preview = $('orderPreview');
+  const costSection = $('costBreakdown');
 
-  if (!group || !units || !city) { preview.style.display = 'none'; return; }
+  if (!group || !units || !city) {
+    preview.style.display = 'none';
+    costSection.style.display = 'none';
+    return;
+  }
 
   const match = pickBestSupplier(city, group, units);
   if (!match) {
     preview.style.display = '';
     preview.className = 'order-preview no-match';
     preview.innerHTML = `&#x26A0; No blood bank currently has ${units} unit(s) of ${group} available. You can still place the order and we will try to arrange it.`;
+    costSection.style.display = 'none';
     return;
   }
 
   const distLabel = match.distance === 0 ? 'in your city' : (match.distance + ' km away');
-  const total = match.price * units;
   preview.style.display = '';
   preview.className = 'order-preview match';
-  preview.innerHTML = `
-    &#x2705; <strong>${units} unit(s)</strong> of <strong>${group}</strong> available <strong>${distLabel}</strong><br>
-    Estimated cost: <strong>&#x20B9;${total.toLocaleString('en-IN')}</strong> (&#x20B9;${match.price.toLocaleString('en-IN')}/unit)
+  preview.innerHTML = `&#x2705; <strong>${units} unit(s)</strong> of <strong>${group}</strong> available <strong>${distLabel}</strong>`;
+
+  // Cost breakdown
+  const bloodCost = match.price * units;
+  const testLow = 200, testHigh = 500;
+  const transportLow = 150, transportHigh = 300;
+  const coordFee = 250;
+  const totalLow = bloodCost + testLow + transportLow + coordFee;
+  const totalHigh = bloodCost + testHigh + transportHigh + coordFee;
+
+  costSection.style.display = '';
+  $('costRows').innerHTML = `
+    <div class="cost-row"><span>Blood processing (${units} unit${units > 1 ? 's' : ''} x &#x20B9;${match.price.toLocaleString('en-IN')})</span><span>&#x20B9;${bloodCost.toLocaleString('en-IN')}</span></div>
+    <div class="cost-row"><span>Sample testing</span><span>&#x20B9;${testLow}–${testHigh}</span></div>
+    <div class="cost-row"><span>Medical transport</span><span>&#x20B9;${transportLow}–${transportHigh}</span></div>
+    <div class="cost-row"><span>Coordination fee</span><span>&#x20B9;${coordFee}</span></div>
   `;
+  $('costTotal').innerHTML = `<span>Estimated Total</span><span>&#x20B9;${totalLow.toLocaleString('en-IN')} – &#x20B9;${totalHigh.toLocaleString('en-IN')}</span>`;
 }
 
 function handlePlaceOrder() {

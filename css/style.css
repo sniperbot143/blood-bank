@@ -82,6 +82,7 @@ hr{border:none;border-top:1px solid #e8e8ec}
 .auth-brand{text-align:center;margin-bottom:24px}
 .logo-lg{font-size:48px;display:block;margin-bottom:8px}
 .auth-brand h1{font-size:22px;font-weight:700}
+.disclaimer{font-size:12px;color:#d97706;background:#fffbeb;border:1px solid #fde68a;padding:6px 12px;border-radius:6px;margin-top:8px;display:inline-block}
 .auth-card{background:#fff;border:1px solid #e2e4e9;border-radius:12px;padding:24px}
 .auth-card h2{font-size:18px;margin-bottom:16px}
 .auth-switch{text-align:center;margin-top:14px;font-size:13px;color:#888}
@@ -159,6 +160,12 @@ hr{border:none;border-top:1px solid #e8e8ec}
 .order-preview.match{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
 .order-preview.no-match{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
 
+/* Cost breakdown */
+.cost-breakdown{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin:10px 0 14px}
+.cost-breakdown h4{font-size:13px;font-weight:700;margin-bottom:8px;color:#334155}
+.cost-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#555;border-bottom:1px solid #f0f0f0}
+.cost-total{display:flex;justify-content:space-between;padding:8px 0 0;font-size:14px;font-weight:700;color:#1e1e2f;border-top:2px solid #e2e4e9;margin-top:4px}
+
 /* ═══════════════════════════════════════════
    USER APP – Order
    ═══════════════════════════════════════════ */
@@ -185,6 +192,8 @@ hr{border:none;border-top:1px solid #e8e8ec}
 .status-tested{background:#d1fae5;color:#059669}
 .status-delivered{background:#ecfdf5;color:#047857}
 .status-rejected{background:#fee2e2;color:#dc2626}
+.status-courier_booked{background:#fce7f3;color:#be185d}
+.status-sample_transport{background:#e0e7ff;color:#4338ca}
 
 /* ── Order Timeline ── */
 .order-timeline{margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0}
@@ -197,6 +206,8 @@ hr{border:none;border-top:1px solid #e8e8ec}
 .timeline-dot.status-tested{background:#059669}
 .timeline-dot.status-delivered{background:#047857}
 .timeline-dot.status-rejected{background:#dc2626}
+.timeline-dot.status-courier_booked{background:#be185d}
+.timeline-dot.status-sample_transport{background:#4338ca}
 .timeline-status{font-weight:600;min-width:70px}
 .timeline-time{color:#999}
 .timeline-note{color:#888}

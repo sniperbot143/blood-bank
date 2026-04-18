@@ -88,13 +88,19 @@ const ORDER_ACTIONS = {
     { label: 'Reject', status: 'rejected', note: 'Order rejected by hospital', danger: true }
   ],
   confirmed: [
-    { label: 'Start Sampling', status: 'sampling', note: 'Blood sampling initiated' }
+    { label: 'Book Courier', status: 'courier_booked', note: 'Medical courier booked for sample pickup' }
+  ],
+  courier_booked: [
+    { label: 'Sample In Transit', status: 'sample_transport', note: 'Sample picked up, courier en route to blood bank' }
+  ],
+  sample_transport: [
+    { label: 'Start Sampling', status: 'sampling', note: 'Sample received, blood sampling initiated' }
   ],
   sampling: [
     { label: 'Mark Tested', status: 'tested', note: 'Blood sample tested and approved' }
   ],
   tested: [
-    { label: 'Mark Delivered', status: 'delivered', note: 'Blood delivered to patient' }
+    { label: 'Mark Delivered', status: 'delivered', note: 'Blood delivered to patient via medical courier' }
   ]
 };
 

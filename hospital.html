@@ -54,8 +54,9 @@
           <input type="number" id="invUnits" min="0" value="0">
         </div>
         <div class="form-group">
-          <label>Price per Unit (INR)</label>
+          <label>Processing Cost per Unit (for display)</label>
           <input type="number" id="invPrice" min="0" value="0">
+          <span class="muted" style="font-size:11px">Users see this + test/transport. Your concession separate.</span>
         </div>
         <div class="form-group" style="align-self:flex-end">
           <button class="btn-primary" onclick="handleAddStock()">Save Stock</button>
@@ -114,6 +115,7 @@
         <ul>
           <li>List blood inventory</li>
           <li>Receive orders</li>
+          <li>Earn via coordination spread</li>
           <li>Basic support</li>
         </ul>
         <button class="btn-primary btn-block" onclick="handleSubscribe('Basic', 2000)">Subscribe – Basic</button>
@@ -123,6 +125,7 @@
         <div class="plan-price">&#x20B9;5,000<span>/month</span></div>
         <ul>
           <li>Everything in Basic</li>
+          <li>Higher match volume</li>
           <li>Priority listing</li>
           <li>Analytics dashboard</li>
           <li>Priority support</li>
@@ -133,7 +136,7 @@
   </main>
 
   <footer>
-    <span>&#x26A0;</span> Demo app. Always verify availability with the provider.
+    <span>&#x26A0;</span> Demo platform. Dynamic pricing (blood/test/transport vary). Coordination model. Medical courier required.
   </footer>
 
   <script src="js/data.js"></script>
