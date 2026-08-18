@@ -77,13 +77,14 @@ State machine maintains:
 - `internal_structure` — same algorithm with `swing_left/right = 1` (or on the LTF).
 - `external_structure` — the default parameters.
 - `bias ∈ {BULLISH, BEARISH, RANGE}` with a `bias_source` recording how it was derived:
-  - **`SWING_SEQUENCE` (Phase 3, current):** `BULLISH` when the last high is `HH`
+  - **`SWING_SEQUENCE` (labels only):** `BULLISH` when the last high is `HH`
     **and** the last low is `HL`; `BEARISH` when `LH` **and** `LL`; `RANGE`
     otherwise. Deliberately **non-sticky** — a broken sequence reads `RANGE`, not
-    a stale trend.
-  - **`BOS_CONFIRMED` (Phase 4, planned):** `BULLISH` after a bullish BOS while
-    price holds above `protected_low`; mirror for bearish; `RANGE` when the last two
-    external breaks alternate in direction.
+    a stale trend. Always available via `swing_sequence_bias_at()`.
+  - **`BOS_CONFIRMED` (default once breaks are attached):** a BOS sets bias to its
+    direction and it holds there until a CHOCH returns it to `RANGE` or an MSS
+    flips it. This is the sticky reading; `bias_at()` returns it whenever a
+    `BreakSeries` is attached (`build_structure(..., with_breaks=True)`).
   - In both: `RANGE` whenever the dealing range width `< range_atr_mult * ATR`
     (default 2.0), regardless of labels.
 
@@ -134,16 +135,25 @@ A **bearish MSS** at bar `i` requires **all** of:
 1. A bearish CHOCH has occurred at or before `i` (same protected low), **and**
 2. The breaking leg qualifies as displacement (§6) — `displacement_score >= mss.min_displacement`, **and**
 3. The break is a **close** through the level (`C_i < level`, regardless of `bos.mode`), **and**
-4. The move that created the break originated from a swept liquidity level or a
-   premium-zone high within `mss.origin_lookback` bars (default 20) — configurable,
-   can be relaxed via `mss.require_origin = false`, **and**
+4. The move originated from a swept liquidity level or a premium-zone high
+   within `mss.origin_lookback` bars — **not yet enforced**: liquidity arrives in
+   Phase 5/6, so `mss_require_swept_origin` defaults to `false` and the check is
+   a no-op until then, rather than being silently ignored, **and**
 5. The broken low was a *valid* structural low (formed by ≥ `mss.min_legs` = 2 swings).
 
 Effect: bias flips to `BEARISH`; new `structural_high` = the high of the leg that
 caused the shift. Bullish MSS is the mirror.
 
+**Pending window.** A CHOCH without displacement stays pending for
+`mss_confirm_window` bars (default 10); a later close through the *same* level
+with displacement confirms the MSS then. Otherwise it expires and is counted.
+
+**Precedence within a bar: MSS > CHOCH > BOS.** A bar that reverses the trend
+does not also continue it, and a level is consumed once broken, so it cannot
+produce a second event.
+
 **Relationship (explicit):** every MSS is a CHOCH; not every CHOCH is an MSS.
-A CHOCH without displacement is recorded as `CHOCH_WEAK` and does not flip bias.
+A CHOCH without displacement stays a CHOCH and does not flip bias.
 BOS is a separate class entirely (continuation). The three are stored as distinct
 event types and are never conflated in features or in the setup taxonomy.
 
@@ -159,9 +169,15 @@ body_ratio     = |C - O| / ATR                     weight 0.40   (needs >= 1.0 t
 range_ratio    = (H - L) / ATR                     weight 0.20   (needs >= 1.5)
 close_location = (C - L)/(H - L) bullish,          weight 0.20   (needs >= 0.70)
                  (H - C)/(H - L) bearish
-imbalance      = 1 if the run leaves an FVG else 0 weight 0.20
+imbalance      = 1 if the run leaves an FVG else 0 weight 0.20  (Phase 8)
 displacement_score = weighted sum, 0..1
 ```
+
+**Staged rollout.** Phase 4 ships the first three components with weights
+0.50 / 0.25 / 0.25 (summing to 1.0) and `imbalance_weight = 0.0`, because FVGs
+do not exist until Phase 8. Switching the fourth component on is a config change
+that alters `rules_hash`, so "STRONG" never changes meaning silently. Multi-bar
+runs (`disp.max_bars`) arrive with Phase 7.
 
 Classes: `NONE < 0.35`, `WEAK 0.35–0.55`, `MODERATE 0.55–0.75`, `STRONG >= 0.75`.
 All weights and cut-offs live in `smc_rules.displacement`. Volume is deliberately

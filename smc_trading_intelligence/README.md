@@ -18,9 +18,10 @@ attached to every number.
 | 0 | Architecture, definitions, methodology | complete |
 | 1 | Data ingestion & normalization | complete |
 | 2 | Swing detection | complete |
-| 3 | Market structure (HH/HL/LH/LL, bias) | **complete — 141 tests passing** |
-| 4 | BOS / CHOCH / MSS | not started — awaiting approval |
-| 5–24 | liquidity → probability → decisions → backtest → paper → live | not started |
+| 3 | Market structure (HH/HL/LH/LL, bias) | complete |
+| 4 | BOS / CHOCH / MSS (+ displacement v1) | **complete — 193 tests passing** |
+| 5 | Liquidity pools & equal levels | not started — awaiting approval |
+| 6–24 | sweeps → FVG/OB → probability → decisions → backtest → paper → live | not started |
 
 ## Quick start
 
@@ -41,6 +42,7 @@ python main.py ingest  --symbol XAUUSDm --tf M5 --csv data/raw/XAUUSDm_M5.csv --
 python main.py inspect --symbol XAUUSDm --tf M5
 python main.py swings  --symbol XAUUSDm --tf M5 --last 6
 python main.py structure --symbol XAUUSDm --tf M5 --min-atr 2.0
+python main.py breaks    --symbol XAUUSDm --tf M5 --last 6
 
 pytest
 ```
@@ -57,8 +59,9 @@ Re-running it appends only new bars and leaves existing rows byte-identical.
 4. [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md) — the data layer, as built and verified
 5. [`docs/PHASE_2_PLAN.md`](docs/PHASE_2_PLAN.md) — the swing engine and the no-repaint proof
 6. [`docs/PHASE_3_PLAN.md`](docs/PHASE_3_PLAN.md) — structure labels, protected levels, bias
-7. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
-8. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
+7. [`docs/PHASE_4_PLAN.md`](docs/PHASE_4_PLAN.md) — BOS vs CHOCH vs MSS, and displacement
+8. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
+9. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
 
 ## Layout
 
@@ -72,9 +75,11 @@ data/mt5_connector.py    read-only MT5 access (import-guarded, Windows-only)
 data/cache.py            parquet cache + manifest, incremental merge
 structure/swings.py      swing detection; formed vs confirmed vs superseded
 structure/market_structure.py  HH/HL/LH/LL, protected levels, bias timeline
+structure/displacement.py  per-bar thrust, ATR-normalised
+structure/breaks.py      BOS / CHOCH / MSS, break-confirmed bias
 tools/                   synthetic data generator (test scaffolding, not market data)
-tests/                   141 tests, incl. the no-repaint oracle tests
-main.py                  ingest · inspect · swings · structure · symbols · status
+tests/                   193 tests, incl. the no-repaint oracle tests
+main.py                  ingest · inspect · swings · structure · breaks · symbols · status
 ```
 
 ## Ground rules

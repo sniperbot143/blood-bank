@@ -80,6 +80,69 @@ class StructureConfig(BaseModel):
     internal_min_swing_atr: float = Field(default=0.0, ge=0.0, le=20.0)
 
 
+class BOSMode(str, Enum):
+    """What counts as "through" a level."""
+
+    CLOSE_ONLY = "CLOSE_ONLY"                          # default: a close beyond it
+    WICK_OR_CLOSE = "WICK_OR_CLOSE"                    # a touch is enough
+    DISPLACEMENT_CONFIRMATION = "DISPLACEMENT_CONFIRMATION"  # close + displacement
+
+
+class DisplacementConfig(BaseModel):
+    """Phase 4 (v1) -- displacement (docs/SMC_DEFINITIONS.md section 6).
+
+    Phase 7 completes this: the imbalance component needs FVGs (Phase 8) and
+    multi-bar runs arrive with it. Weights are config, not code, so switching
+    the fourth component on is a visible, hash-changing decision rather than a
+    silent shift in what "STRONG" means.
+    """
+
+    model_config = {"frozen": True}
+
+    body_weight: float = Field(default=0.50, ge=0.0, le=1.0)
+    range_weight: float = Field(default=0.25, ge=0.0, le=1.0)
+    close_weight: float = Field(default=0.25, ge=0.0, le=1.0)
+    imbalance_weight: float = Field(default=0.0, ge=0.0, le=1.0)  # Phase 8 turns this on
+
+    # Value of each raw measure at which its component scores a full 1.0.
+    body_atr_full: float = Field(default=1.0, gt=0.0, le=20.0)
+    range_atr_full: float = Field(default=1.5, gt=0.0, le=20.0)
+    close_location_min: float = Field(default=0.70, ge=0.0, lt=1.0)
+
+    weak_threshold: float = Field(default=0.35, ge=0.0, le=1.0)
+    moderate_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    strong_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check(self) -> DisplacementConfig:
+        total = self.body_weight + self.range_weight + self.close_weight + self.imbalance_weight
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError(f"displacement weights must sum to 1.0, got {total}")
+        if not self.weak_threshold <= self.moderate_threshold <= self.strong_threshold:
+            raise ValueError("displacement thresholds must be weak <= moderate <= strong")
+        return self
+
+
+class BreakConfig(BaseModel):
+    """Phase 4 -- BOS / CHOCH / MSS (docs/SMC_DEFINITIONS.md sections 3-5)."""
+
+    model_config = {"frozen": True}
+
+    bos_mode: BOSMode = BOSMode.CLOSE_ONLY
+
+    # A bar that opens after missing data is not evidence of a break.
+    reject_on_gap_bar: bool = True
+
+    # MSS = CHOCH + displacement. The CHOCH stays pending this many bars for a
+    # displaced close through the same level before it expires.
+    mss_min_displacement: float = Field(default=0.55, ge=0.0, le=1.0)
+    mss_confirm_window: int = Field(default=10, ge=0, le=500)
+    mss_min_legs: int = Field(default=2, ge=0, le=20)
+
+    # Requires liquidity (Phase 6). Off until then rather than silently ignored.
+    mss_require_swept_origin: bool = False
+
+
 class SMCRules(BaseModel):
     """Top-level rule set. Later phases add their sections here."""
 
@@ -88,6 +151,8 @@ class SMCRules(BaseModel):
     atr_period: int = Field(default=14, ge=2, le=200)
     swing: SwingConfig = SwingConfig()
     structure: StructureConfig = StructureConfig()
+    displacement: DisplacementConfig = DisplacementConfig()
+    breaks: BreakConfig = BreakConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""

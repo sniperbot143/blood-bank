@@ -31,7 +31,8 @@ class Bias(str, Enum):
 
 
 class BiasSource(str, Enum):
-    SWING_SEQUENCE = "SWING_SEQUENCE"   # Phase 3
+    SWING_SEQUENCE = "SWING_SEQUENCE"   # Phase 3: labels only
+    BOS_CONFIRMED = "BOS_CONFIRMED"     # Phase 4: driven by BOS / CHOCH / MSS
     NO_STRUCTURE = "NO_STRUCTURE"       # not enough confirmed swings yet
 
 
@@ -148,6 +149,7 @@ class MarketStructure:
     scope: Scope = Scope.EXTERNAL
     config: StructureConfig = field(default_factory=StructureConfig)
     internal: "MarketStructure | None" = None
+    breaks: object | None = None      # a BreakSeries once Phase 4 is attached
 
     # -- accessors ---------------------------------------------------------
 
@@ -155,9 +157,27 @@ class MarketStructure:
         return [l for l in self.labels if l.confirmed_at_index <= index]
 
     def bias_at(self, index: int) -> Bias:
+        """Bias at a bar. Break-confirmed once a BreakSeries is attached."""
+        if not self.n_bars:
+            return Bias.RANGE
+        at = max(0, min(index, self.n_bars - 1))
+        if self.breaks is not None:
+            return self.breaks.bias_at(at)
+        return self.bias_by_bar[at]
+
+    def swing_sequence_bias_at(self, index: int) -> Bias:
+        """The Phase 3 label-only bias, regardless of any attached breaks."""
         if not self.n_bars:
             return Bias.RANGE
         return self.bias_by_bar[max(0, min(index, self.n_bars - 1))]
+
+    def attach_breaks(self, breaks) -> None:
+        """Adopt a BreakSeries as the source of truth for bias.
+
+        Duck-typed (needs only `bias_at`) so `structure` does not import
+        `breaks`, which imports `structure`.
+        """
+        self.breaks = breaks
 
     def state_at(self, index: int, *, frame: pd.DataFrame | None = None,
                  atr: pd.Series | None = None) -> StructureState:
@@ -166,7 +186,7 @@ class MarketStructure:
         Deliberately independent of the forward pass that fills `bias_by_bar`,
         so the two can be cross-checked against each other in tests.
         """
-        return _state_at(
+        state = _state_at(
             index,
             labels=self.labels,
             config=self.config,
@@ -174,6 +194,10 @@ class MarketStructure:
             timestamp=self._timestamp(index, frame),
             scope=self.scope,
         )
+        if self.breaks is not None and self.n_bars:
+            state.bias = self.breaks.bias_at(max(0, min(index, self.n_bars - 1)))
+            state.bias_source = BiasSource.BOS_CONFIRMED
+        return state
 
     @property
     def current(self) -> StructureState:
@@ -324,6 +348,57 @@ def _state_at(index: int, *, labels: list[LabelledSwing], config: StructureConfi
     )
 
 
+@dataclass(frozen=True)
+class LevelSnapshot:
+    """The four structural levels as known at one bar."""
+
+    index: int
+    structural_high: SwingPoint | None
+    structural_low: SwingPoint | None
+    protected_high: SwingPoint | None
+    protected_low: SwingPoint | None
+    swings_known: int
+
+
+def iter_levels(structure: "MarketStructure"):
+    """Walk the levels bar by bar in one pass (O(n) instead of O(n^2)).
+
+    Same definitions as `state_at`, but streamed -- used by the break engine,
+    which needs the levels at every bar. The two are cross-checked in tests.
+    """
+    ordered = sorted(structure.labels, key=lambda l: (l.confirmed_at_index, l.formed_at_index))
+    cursor = 0
+    highs: list[SwingPoint] = []
+    lows: list[SwingPoint] = []
+
+    for t in range(structure.n_bars):
+        while cursor < len(ordered) and ordered[cursor].confirmed_at_index <= t:
+            item = ordered[cursor]
+            (highs if item.kind is SwingKind.HIGH else lows).append(item.swing)
+            cursor += 1
+
+        structural_high = highs[-1] if highs else None
+        structural_low = lows[-1] if lows else None
+        yield LevelSnapshot(
+            index=t,
+            structural_high=structural_high,
+            structural_low=structural_low,
+            protected_high=_last_formed_before(highs, structural_low),
+            protected_low=_last_formed_before(lows, structural_high),
+            swings_known=len(highs) + len(lows),
+        )
+
+
+def _last_formed_before(candidates: list[SwingPoint],
+                        reference: SwingPoint | None) -> SwingPoint | None:
+    if reference is None:
+        return None
+    for swing in reversed(candidates):
+        if swing.formed_at_index < reference.formed_at_index:
+            return swing
+    return None
+
+
 def _preceding(known: list[LabelledSwing], kind: SwingKind,
                reference: SwingPoint | None) -> SwingPoint | None:
     if reference is None:
@@ -447,8 +522,14 @@ def build_structure(
     rules: SMCRules = DEFAULT_RULES,
     *,
     atr: pd.Series | None = None,
+    with_breaks: bool = False,
 ) -> MarketStructure:
-    """Convenience: detect external (and internal) swings and analyse both."""
+    """Convenience: detect external (and internal) swings and analyse both.
+
+    `with_breaks=True` also runs the Phase 4 engine and attaches it, which
+    switches `bias` from SWING_SEQUENCE to BOS_CONFIRMED. It is opt-in so the
+    two definitions can be compared rather than one silently replacing the other.
+    """
     atr_series = atr if atr is not None else wilder_atr(frame, rules.atr_period)
 
     external_swings = detect_swings(frame, rules, atr=atr_series)
@@ -460,4 +541,9 @@ def build_structure(
         internal_swings = detect_swings(frame, internal_rules, atr=atr_series)
         external.internal = analyze_structure(frame, internal_swings, internal_rules,
                                               atr=atr_series, scope=Scope.INTERNAL)
+
+    if with_breaks:
+        from structure.breaks import detect_breaks   # local: breaks imports this module
+
+        external.attach_breaks(detect_breaks(frame, external, rules, atr=atr_series))
     return external

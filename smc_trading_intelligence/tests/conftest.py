@@ -49,15 +49,18 @@ def make_frame(
     highs: list[float],
     lows: list[float],
     *,
+    opens: list[float] | None = None,
+    closes: list[float] | None = None,
     start: str = "2024-01-02 09:00",
     minutes: int = 5,
     symbol: str = "TESTm",
     timeframe: str = "M5",
 ) -> pd.DataFrame:
-    """A canonical closed-bar frame with an exactly specified high/low shape.
+    """A canonical closed-bar frame with an exactly specified shape.
 
-    Opens and closes are placed inside each bar's range, so the frame passes
-    the normalizer's OHLC sanity checks.
+    Opens and closes default to the midpoint of each bar (no body, no
+    displacement) so swing tests isolate geometry. Pass `opens`/`closes`
+    explicitly when a test needs real bodies -- displacement scoring reads them.
     """
     from data.normalizer import normalize
 
@@ -66,16 +69,19 @@ def make_frame(
         return normalize(pd.DataFrame(), symbol=symbol, timeframe=timeframe).frame
     index = pd.date_range(start=start, periods=len(highs), freq=f"{minutes}min")
     rows = []
-    for ts, high, low in zip(index, highs, lows):
+    for i, (ts, high, low) in enumerate(zip(index, highs, lows)):
         assert high >= low, f"high {high} < low {low}"
         mid = (high + low) / 2
+        open_ = opens[i] if opens is not None else mid
+        close = closes[i] if closes is not None else mid
+        assert low <= open_ <= high and low <= close <= high, f"bar {i} open/close outside range"
         rows.append(
             {
                 "time": ts,
-                "open": mid,
+                "open": open_,
                 "high": high,
                 "low": low,
-                "close": mid,
+                "close": close,
                 "tick_volume": 100,
                 "spread": 10,
             }

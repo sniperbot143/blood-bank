@@ -1,11 +1,14 @@
 """SMC Trading Intelligence -- command line entry point.
 
-Phase 1 commands (data layer only, read-only, no trading):
+Read-only analysis. No order is ever placed by this program.
 
-    python main.py ingest  --symbol XAUUSDm --tf M5 --bars 200000
-    python main.py ingest  --csv data/raw/XAUUSD_M5.csv --symbol XAUUSDm --tf M5
-    python main.py inspect --symbol XAUUSDm --tf M5
-    python main.py symbols --search XAU
+    python main.py ingest    --symbol XAUUSDm --tf M5 --bars 200000
+    python main.py ingest    --csv data/raw/XAUUSD_M5.csv --symbol XAUUSDm --tf M5
+    python main.py inspect   --symbol XAUUSDm --tf M5
+    python main.py swings    --symbol XAUUSDm --tf M5
+    python main.py structure --symbol XAUUSDm --tf M5
+    python main.py breaks    --symbol XAUUSDm --tf M5
+    python main.py symbols   --search XAU
     python main.py status
 """
 
@@ -330,6 +333,80 @@ def cmd_structure(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_breaks(args: argparse.Namespace, settings: Settings) -> int:
+    from config.smc_rules import (
+        BOSMode, BreakConfig, SMCRules, StructureConfig, SwingConfig, SwingMode,
+    )
+    from data.normalizer import closed_bars
+    from structure.breaks import BreakType
+    from structure.market_structure import build_structure
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to analyse")
+        return 1
+
+    rules = SMCRules(
+        atr_period=args.atr_period,
+        swing=SwingConfig(mode=SwingMode(args.mode), swing_left=args.left,
+                          swing_right=args.right, min_swing_atr=args.min_atr),
+        structure=StructureConfig(range_atr_mult=args.range_atr, track_internal=False),
+        breaks=BreakConfig(bos_mode=BOSMode(args.bos_mode),
+                           mss_min_displacement=args.min_displacement,
+                           mss_confirm_window=args.mss_window),
+    )
+    structure = build_structure(frame, rules, with_breaks=True)
+    breaks = structure.breaks
+
+    at = _resolve_bar(frame, args.as_of)
+    if at < 0:
+        log.error("--as-of %s is before the first bar", args.as_of)
+        return 1
+
+    known = breaks.events_known_at(at)
+    counts = breaks.counts()
+    bias_bars: dict[str, int] = {}
+    for t in range(len(frame)):
+        key = breaks.bias_at(t).value
+        bias_bars[key] = bias_bars.get(key, 0) + 1
+
+    print(f"symbol / timeframe : {structure.symbol} {structure.timeframe}")
+    print(f"bars analysed      : {len(frame):,}")
+    print(f"rules hash         : {rules.rules_hash[:16]}...")
+    print(f"bos mode           : {rules.breaks.bos_mode.value}")
+    print(f"mss threshold      : {rules.breaks.mss_min_displacement} "
+          f"(window {rules.breaks.mss_confirm_window} bars)")
+    print(f"events             : {len(breaks.events):,} {counts}")
+    print(f"expired CHOCH      : {breaks.expired_choch:,}")
+    print(f"bias share (breaks): "
+          f"{ {k: f'{v / len(frame):.1%}' for k, v in sorted(bias_bars.items())} }")
+
+    state = structure.state_at(at)
+    print(f"\nstate at bar {at} ({frame.index[at]:%Y-%m-%d %H:%M} UTC)")
+    print(state.describe())
+
+    if known and args.last:
+        print(f"\nlast {min(args.last, len(known))} events:")
+        print(f"  {'type':<6} {'dir':<8} {'when (UTC)':<17} {'level':>10} "
+              f"{'close':>10} {'disp':>6}  bias")
+        for event in known[-args.last:]:
+            disp = ("  n/a" if event.displacement.score != event.displacement.score
+                    else f"{event.displacement.score:.2f}")
+            print(f"  {event.type.value:<6} {event.direction.value:<8} "
+                  f"{event.timestamp:%Y-%m-%d %H:%M} {event.broken_level:>10.5f} "
+                  f"{event.break_price:>10.5f} {disp:>6}  "
+                  f"{event.bias_before.value}->{event.bias_after.value}")
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -436,6 +513,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_st.add_argument("--as-of", default=None, help="bar index or timestamp")
     p_st.add_argument("--last", type=int, default=8)
     p_st.set_defaults(func=cmd_structure)
+
+    p_br = sub.add_parser("breaks", help="detect BOS / CHOCH / MSS")
+    p_br.add_argument("--symbol", required=True)
+    p_br.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_br.add_argument("--bars", type=int, default=None)
+    p_br.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_br.add_argument("--left", type=int, default=5)
+    p_br.add_argument("--right", type=int, default=5)
+    p_br.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_br.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_br.add_argument("--range-atr", type=float, default=2.0, dest="range_atr")
+    p_br.add_argument("--bos-mode", default="CLOSE_ONLY", dest="bos_mode",
+                      choices=["CLOSE_ONLY", "WICK_OR_CLOSE", "DISPLACEMENT_CONFIRMATION"])
+    p_br.add_argument("--min-displacement", type=float, default=0.55, dest="min_displacement")
+    p_br.add_argument("--mss-window", type=int, default=10, dest="mss_window")
+    p_br.add_argument("--as-of", default=None, help="bar index or timestamp")
+    p_br.add_argument("--last", type=int, default=10)
+    p_br.set_defaults(func=cmd_breaks)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)

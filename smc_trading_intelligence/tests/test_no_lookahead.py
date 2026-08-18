@@ -12,7 +12,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from config.smc_rules import SMCRules, StructureConfig, SwingConfig, SwingMode
+from config.smc_rules import (
+    BOSMode,
+    BreakConfig,
+    SMCRules,
+    StructureConfig,
+    SwingConfig,
+    SwingMode,
+)
+from structure.breaks import detect_breaks
 from structure.market_structure import build_structure
 from structure.swings import detect_swings
 from tests.conftest import make_frame
@@ -157,3 +165,69 @@ def test_appending_a_new_bar_never_edits_older_state():
                 )
             else:
                 previous_states[earlier] = state
+
+
+# --------------------------------------------------------- Phase 4: breaks
+
+def _break_fingerprint(events) -> list[tuple]:
+    return [
+        (e.type.value, e.direction.value, e.index, round(e.broken_level, 6),
+         e.bias_after.value)
+        for e in events
+    ]
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        SMCRules(structure=StructureConfig(track_internal=False)),
+        SMCRules(swing=SwingConfig(swing_left=2, swing_right=2, min_swing_atr=0.0),
+                 structure=StructureConfig(range_atr_mult=0.0, track_internal=False)),
+        SMCRules(structure=StructureConfig(track_internal=False),
+                 breaks=BreakConfig(bos_mode=BOSMode.WICK_OR_CLOSE, mss_min_displacement=0.4)),
+    ],
+    ids=["default", "fine", "wick_mode"],
+)
+def test_breaks_never_repaint(rules):
+    """An event's `index` must be the first bar it could have been known."""
+    frame = _random_walk_frame(200, seed=23)
+    full_structure = build_structure(frame, rules)
+    full = detect_breaks(frame, full_structure, rules)
+
+    for t in range(len(frame)):
+        window = frame.iloc[: t + 1]
+        live = detect_breaks(window, build_structure(window, rules), rules)
+        assert _break_fingerprint(live.events) == _break_fingerprint(full.events_known_at(t)), (
+            f"break history at bar {t} differs between a live run and history"
+        )
+        assert live.bias_at(t) is full.bias_at(t)
+
+
+def test_break_confirmed_bias_is_reproducible_at_every_bar():
+    frame = _random_walk_frame(240, seed=37)
+    rules = SMCRules(structure=StructureConfig(track_internal=False))
+    full = build_structure(frame, rules, with_breaks=True)
+
+    for t in range(0, len(frame), 5):
+        window = frame.iloc[: t + 1]
+        live = build_structure(window, rules, with_breaks=True)
+        assert live.current.bias is full.state_at(t).bias
+
+
+def test_displacement_of_a_bar_never_changes():
+    """Displacement reads one bar plus a causal ATR -- it cannot be revised."""
+    from common.indicators import wilder_atr
+    from config.smc_rules import DisplacementConfig
+    from structure.displacement import displacement_at
+
+    frame = _random_walk_frame(120, seed=41)
+    config = DisplacementConfig()
+    full_atr = wilder_atr(frame, 14)
+
+    for t in range(20, len(frame), 9):
+        window = frame.iloc[: t + 1]
+        live = displacement_at(window, t, bullish=True,
+                               atr_value=float(wilder_atr(window, 14).iloc[t]), config=config)
+        historical = displacement_at(frame, t, bullish=True,
+                                     atr_value=float(full_atr.iloc[t]), config=config)
+        assert live.score == historical.score

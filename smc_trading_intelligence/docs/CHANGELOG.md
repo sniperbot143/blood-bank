@@ -2,6 +2,47 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [0.5.0] — 2026-08-18 — Phase 4: BOS / CHOCH / MSS
+
+### Added
+- `structure/displacement.py` — displacement scoring v1: body/ATR, range/ATR and
+  close location, ATR-normalised and direction-aware, with NONE/WEAK/MODERATE/
+  STRONG classes. The imbalance component (Phase 8) is wired at weight 0.0.
+- `structure/breaks.py` — `detect_breaks()`: BOS (continuation), CHOCH (warning,
+  bias → RANGE) and MSS (CHOCH + displacement, bias flips) as three distinct
+  event types, plus a pending-CHOCH window, level consumption, a gap-bar guard
+  and a break-confirmed bias timeline.
+- `structure/market_structure.py` — `iter_levels()` (O(n) streaming levels),
+  `attach_breaks()`, `swing_sequence_bias_at()`, `build_structure(with_breaks=True)`.
+- `config/smc_rules.py` — `BOSMode`, `DisplacementConfig`, `BreakConfig`.
+- `main.py breaks` — events, counts, expired CHOCHs, bias share, `--as-of`.
+- 52 new tests (22 displacement + 25 breaks + 5 break oracle).
+
+### Fixed
+- A bar could emit CHOCH, MSS *and* a redundant BOS on the same already-broken
+  level. Precedence is now MSS > CHOCH > BOS, and a level is consumed when broken.
+
+### Decisions locked
+- `bias_source` switches to `BOS_CONFIRMED` when a BreakSeries is attached;
+  the Phase 3 reading stays reachable via `swing_sequence_bias_at()`.
+- Displacement weights are config, so enabling the Phase 8 component changes
+  `rules_hash` rather than silently redefining STRONG.
+- `mss_require_swept_origin` exists but defaults to false until Phase 6 can
+  supply the real test — the requirement is deferred in the open, not dropped.
+- bos.py/choch.py/mss.py merged into `structure/breaks.py`: they share one
+  forward pass and one bias state machine (documented in PHASE_4_PLAN §11).
+
+### Verified
+- 193/193 tests pass.
+- Break oracle across 3 parameter sets: for every bar `t`, a fresh run over
+  `frame[:t+1]` reproduces exactly the events known at `t`, with the same bias.
+- Displacement scoring of a bar is identical from a truncated and a full frame.
+- 18,539 bars → 742 events (120 MSS, 60 expired CHOCH) in 0.22 s.
+
+### Noted
+- Break-confirmed bias spends 10.2% of bars in RANGE versus 41.8% for the
+  Phase 3 label rule on the same data — the intended stickiness, now measured.
+
 ## [0.4.0] — 2026-08-18 — Phase 3: market structure
 
 ### Added
