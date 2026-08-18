@@ -62,6 +62,24 @@ class SwingConfig(BaseModel):
         return self.swing_left + self.swing_right + 1
 
 
+class StructureConfig(BaseModel):
+    """Phase 3 -- market structure (docs/SMC_DEFINITIONS.md section 2)."""
+
+    model_config = {"frozen": True}
+
+    # Two highs within this many ATR of each other are "equal", not HH/LH.
+    equal_tolerance_atr: float = Field(default=0.05, ge=0.0, le=5.0)
+
+    # A dealing range narrower than this is a range, whatever the labels say.
+    range_atr_mult: float = Field(default=2.0, ge=0.0, le=50.0)
+
+    # Internal structure: the same algorithm on a finer swing setting.
+    track_internal: bool = True
+    internal_left: int = Field(default=1, ge=1, le=50)
+    internal_right: int = Field(default=1, ge=1, le=50)
+    internal_min_swing_atr: float = Field(default=0.0, ge=0.0, le=20.0)
+
+
 class SMCRules(BaseModel):
     """Top-level rule set. Later phases add their sections here."""
 
@@ -69,6 +87,17 @@ class SMCRules(BaseModel):
 
     atr_period: int = Field(default=14, ge=2, le=200)
     swing: SwingConfig = SwingConfig()
+    structure: StructureConfig = StructureConfig()
+
+    def internal_swing_config(self) -> SwingConfig:
+        """The finer swing setting used for internal structure."""
+        return self.swing.model_copy(
+            update={
+                "swing_left": self.structure.internal_left,
+                "swing_right": self.structure.internal_right,
+                "min_swing_atr": self.structure.internal_min_swing_atr,
+            }
+        )
 
     @property
     def rules_hash(self) -> str:

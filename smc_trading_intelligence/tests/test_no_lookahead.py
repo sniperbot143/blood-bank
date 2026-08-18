@@ -12,7 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from config.smc_rules import SMCRules, SwingConfig, SwingMode
+from config.smc_rules import SMCRules, StructureConfig, SwingConfig, SwingMode
+from structure.market_structure import build_structure
 from structure.swings import detect_swings
 from tests.conftest import make_frame
 
@@ -80,6 +81,65 @@ def test_detection_is_deterministic():
     b = detect_swings(frame, SMCRules())
     assert _fingerprint(a.swings) == _fingerprint(b.swings)
     assert a.reject_counts() == b.reject_counts()
+
+
+def _structure_fingerprint(state) -> tuple:
+    def level(swing):
+        return None if swing is None else (swing.formed_at_index, round(swing.price, 6))
+
+    return (
+        state.bias.value,
+        level(state.structural_high),
+        level(state.structural_low),
+        level(state.protected_high),
+        level(state.protected_low),
+        state.last_high_label.value if state.last_high_label else None,
+        state.last_low_label.value if state.last_low_label else None,
+    )
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        SMCRules(structure=StructureConfig(track_internal=False)),
+        SMCRules(swing=SwingConfig(swing_left=2, swing_right=2, min_swing_atr=0.0),
+                 structure=StructureConfig(range_atr_mult=0.0, track_internal=False)),
+        SMCRules(swing=SwingConfig(swing_left=4, swing_right=2, min_swing_atr=1.0),
+                 structure=StructureConfig(equal_tolerance_atr=0.2, track_internal=False)),
+    ],
+    ids=["default", "fine", "coarse_with_equals"],
+)
+def test_market_structure_never_repaints(rules):
+    """Bias, structural levels and protected levels must all be as-of-honest."""
+    frame = _random_walk_frame(220, seed=13)
+    full = build_structure(frame, rules)
+
+    for t in range(len(frame)):
+        truncated = build_structure(frame.iloc[: t + 1], rules)
+        assert _structure_fingerprint(truncated.current) == _structure_fingerprint(full.state_at(t)), (
+            f"structure at bar {t} differs between a live run and history"
+        )
+        assert truncated.bias_at(t) is full.bias_at(t)
+
+
+def test_labels_are_fixed_at_confirmation():
+    """A swing's HH/HL/LH/LL label must never be rewritten by later bars."""
+    frame = _random_walk_frame(200, seed=29)
+    rules = SMCRules(structure=StructureConfig(track_internal=False))
+    full = build_structure(frame, rules)
+
+    for t in range(40, len(frame), 7):
+        truncated = build_structure(frame.iloc[: t + 1], rules)
+        seen = [(l.formed_at_index, l.label.value) for l in truncated.labels_known_at(t)]
+        expected = [(l.formed_at_index, l.label.value) for l in full.labels_known_at(t)]
+        assert seen == expected
+
+
+def test_bias_timeline_matches_recomputed_state_everywhere():
+    """The fast forward pass and the from-scratch state must never diverge."""
+    frame = _random_walk_frame(300, seed=31)
+    ms = build_structure(frame, SMCRules(structure=StructureConfig(track_internal=False)))
+    assert all(ms.state_at(t).bias is ms.bias_at(t) for t in range(len(frame)))
 
 
 def test_appending_a_new_bar_never_edits_older_state():

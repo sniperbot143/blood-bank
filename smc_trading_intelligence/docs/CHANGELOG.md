@@ -2,6 +2,43 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [0.4.0] — 2026-08-18 — Phase 3: market structure
+
+### Added
+- `config/smc_rules.py` — `StructureConfig` (equal-level tolerance, narrow-range
+  veto, internal-structure settings) and `SMCRules.internal_swing_config()`.
+- `structure/market_structure.py` — `build_structure()` / `analyze_structure()`:
+  HH/HL/LH/LL/EQH/EQL labelling, `structural_high/low`, `protected_high/low`,
+  a per-bar bias timeline with `BiasChange` transitions, `state_at(t)` time
+  travel, `bias_share()`, and optional internal structure on a finer swing setting.
+- `main.py structure` — labels, levels, bias share, recent transitions, `--as-of`.
+- 28 new tests (23 structure + 5 structure oracle tests).
+
+### Decisions locked
+- Bias is **non-sticky** in Phase 3: a broken sequence reads RANGE rather than a
+  stale trend. `bias_source` records the derivation (`SWING_SEQUENCE` today,
+  `BOS_CONFIRMED` from Phase 4) so the field survives the upgrade.
+- A dealing range narrower than `range_atr_mult × ATR` (default 2.0) is RANGE
+  whatever the labels say.
+- `protected_low` is the last low formed before the current structural high (and
+  mirror) — refined to "before the last displacement leg" once Phase 7 lands.
+- A swing that supersedes another is labelled against the swing it replaced.
+- Two independent bias code paths are kept (fast forward pass and from-scratch
+  `state_at`) specifically so they can be cross-checked against each other.
+
+### Verified
+- 141/141 tests pass.
+- Structure oracle across 3 parameter sets: for every bar `t`, a fresh run over
+  `frame[:t+1]` reproduces the full run's bias, structural levels, protected
+  levels and labels exactly.
+- The two bias paths agree on every bar of 300.
+- 18,539 bars → 1,590 labels, 855 bias changes, in 0.13 s.
+
+### Noted
+- Bias-change frequency is highly sensitive to the swing setting (1,671 changes
+  at left/right=3, 356 at left/right=8). Recorded as a parameter-sensitivity
+  risk (KNOWN_ISSUES #3), to be reported as a surface in Phase 19.
+
 ## [0.3.0] — 2026-08-18 — Phase 2: swing detection
 
 ### Added

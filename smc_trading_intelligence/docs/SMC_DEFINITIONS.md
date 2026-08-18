@@ -59,20 +59,37 @@ Sequence of confirmed alternating swings labelled:
 - `LH` — swing high below previous swing high
 - `LL` — swing low below previous swing low
 
+Each swing is labelled against the previous swing **of the same kind**, at its own
+confirmation bar. `EQH`/`EQL` when within `equal_tolerance_atr × ATR` (default 0.05);
+`FIRST_HIGH`/`FIRST_LOW` when there is nothing to compare against yet. A swing that
+supersedes another is labelled against the swing it replaced — a higher high is an `HH`.
+
 State machine maintains:
 
-- `structural_high` / `structural_low` — the swing that must break to change external structure.
-- `protected_high` / `protected_low` — the most recent opposing swing formed *before*
-  the last displacement leg; this is the level whose break invalidates the current leg.
+- `structural_high` / `structural_low` — the most recently confirmed swing of each
+  kind: the swing that must break to change external structure. A superseded swing
+  can never occupy this slot (supersession only happens between consecutive
+  same-kind swings, so the latest confirmed swing is always the live one).
+- `protected_high` / `protected_low` — the last opposite-kind swing that formed
+  *before* the current structural level: the low that created the current high (and
+  mirror). This is the level whose break invalidates the current leg. From Phase 7
+  this is refined to "before the last displacement leg" once displacement exists.
 - `internal_structure` — same algorithm with `swing_left/right = 1` (or on the LTF).
 - `external_structure` — the default parameters.
-- `bias ∈ {BULLISH, BEARISH, RANGE}`:
-  - `BULLISH` after a bullish BOS while price holds above `protected_low`.
-  - `BEARISH` after a bearish BOS while price holds above/below the mirror.
-  - `RANGE` when the last two external breaks alternate in direction, or when the
-    dealing range width `< range_atr_mult * ATR` (default 2.0) over `range_lookback` bars.
+- `bias ∈ {BULLISH, BEARISH, RANGE}` with a `bias_source` recording how it was derived:
+  - **`SWING_SEQUENCE` (Phase 3, current):** `BULLISH` when the last high is `HH`
+    **and** the last low is `HL`; `BEARISH` when `LH` **and** `LL`; `RANGE`
+    otherwise. Deliberately **non-sticky** — a broken sequence reads `RANGE`, not
+    a stale trend.
+  - **`BOS_CONFIRMED` (Phase 4, planned):** `BULLISH` after a bullish BOS while
+    price holds above `protected_low`; mirror for bearish; `RANGE` when the last two
+    external breaks alternate in direction.
+  - In both: `RANGE` whenever the dealing range width `< range_atr_mult * ATR`
+    (default 2.0), regardless of labels.
 
 Micro noise is excluded by the swing ATR filter, so not every wiggle is a structure event.
+Bias-change frequency is nonetheless a direct function of the swing setting — see the
+sensitivity table in `PHASE_3_PLAN.md` §6 and KNOWN_ISSUES #3.
 
 ---
 

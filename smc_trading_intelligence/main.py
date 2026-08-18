@@ -254,6 +254,82 @@ def cmd_swings(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _resolve_bar(frame: pd.DataFrame, as_of: str | None) -> int:
+    """Bar index from an index number or a timestamp; last bar when unset."""
+    if as_of is None:
+        return len(frame) - 1
+    if str(as_of).lstrip("-").isdigit():
+        return int(as_of)
+    return int(frame.index.get_indexer([pd.Timestamp(as_of, tz="UTC")], method="ffill")[0])
+
+
+def cmd_structure(args: argparse.Namespace, settings: Settings) -> int:
+    from config.smc_rules import SMCRules, StructureConfig, SwingConfig, SwingMode
+    from data.normalizer import closed_bars
+    from structure.market_structure import build_structure
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to analyse")
+        return 1
+
+    rules = SMCRules(
+        atr_period=args.atr_period,
+        swing=SwingConfig(mode=SwingMode(args.mode), swing_left=args.left,
+                          swing_right=args.right, min_swing_atr=args.min_atr),
+        structure=StructureConfig(equal_tolerance_atr=args.equal_atr,
+                                  range_atr_mult=args.range_atr,
+                                  track_internal=not args.no_internal),
+    )
+    ms = build_structure(frame, rules)
+
+    at = _resolve_bar(frame, args.as_of)
+    if at < 0:
+        log.error("--as-of %s is before the first bar", args.as_of)
+        return 1
+    state = ms.state_at(at)
+
+    print(f"symbol / timeframe : {ms.symbol} {ms.timeframe}")
+    print(f"bars analysed      : {len(frame):,}")
+    print(f"rules hash         : {rules.rules_hash[:16]}...")
+    print(f"swings / labels    : {len(ms.swings.swings):,} / {len(ms.labels):,}")
+    print(f"label counts       : {ms.label_counts()}")
+    print(f"bias share         : "
+          f"{ {k: f'{v:.1%}' for k, v in ms.bias_share().items()} }")
+    print(f"bias changes       : {len(ms.changes):,}")
+    print(f"\nstate at bar {at} ({frame.index[at]:%Y-%m-%d %H:%M} UTC)")
+    print(state.describe())
+
+    if ms.internal is not None:
+        internal = ms.internal.state_at(at)
+        print(f"internal bias    : {internal.bias.value} "
+              f"({len(ms.internal.labels):,} internal labels)")
+
+    known = ms.labels_known_at(at)
+    if known and args.last:
+        print(f"\nlast {min(args.last, len(known))} confirmed labels:")
+        print(f"  {'label':<11} {'formed (UTC)':<17} {'price':>10} {'conf. bar':>10}")
+        for item in known[-args.last:]:
+            print(f"  {item.label.value:<11} {item.swing.formed_at:%Y-%m-%d %H:%M} "
+                  f"{item.price:>10.5f} {item.confirmed_at_index:>10}")
+
+    recent = [c for c in ms.changes if c.index <= at]
+    if recent and args.last:
+        print(f"\nlast {min(args.last, len(recent))} bias changes:")
+        for change in recent[-args.last:]:
+            print(f"  {change.timestamp:%Y-%m-%d %H:%M}  "
+                  f"{change.previous.value:>7} -> {change.current.value:<7}  ({change.reason})")
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -341,6 +417,25 @@ def build_parser() -> argparse.ArgumentParser:
                       help="bar index or timestamp: show the chain as it was known then")
     p_sw.add_argument("--last", type=int, default=10)
     p_sw.set_defaults(func=cmd_swings)
+
+    p_st = sub.add_parser("structure", help="label HH/HL/LH/LL and show the bias timeline")
+    p_st.add_argument("--symbol", required=True)
+    p_st.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_st.add_argument("--bars", type=int, default=None, help="use only the last N bars")
+    p_st.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_st.add_argument("--left", type=int, default=3)
+    p_st.add_argument("--right", type=int, default=3)
+    p_st.add_argument("--min-atr", type=float, default=0.5, dest="min_atr")
+    p_st.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_st.add_argument("--equal-atr", type=float, default=0.05, dest="equal_atr",
+                      help="EQH/EQL tolerance in ATR")
+    p_st.add_argument("--range-atr", type=float, default=2.0, dest="range_atr",
+                      help="dealing range narrower than this many ATR is RANGE")
+    p_st.add_argument("--no-internal", action="store_true")
+    p_st.add_argument("--as-of", default=None, help="bar index or timestamp")
+    p_st.add_argument("--last", type=int, default=8)
+    p_st.set_defaults(func=cmd_structure)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)
