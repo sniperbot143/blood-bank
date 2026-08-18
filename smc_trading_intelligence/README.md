@@ -15,17 +15,57 @@ attached to every number.
 
 | phase | scope | status |
 |---|---|---|
-| 0 | Architecture, definitions, methodology | **design complete — this commit** |
-| 1 | Data ingestion & normalization | proposed, awaiting approval |
-| 2–24 | swings → structure → liquidity → probability → decisions → backtest → paper → live | not started |
+| 0 | Architecture, definitions, methodology | complete |
+| 1 | Data ingestion & normalization | **complete — 74 tests passing** |
+| 2 | Swing detection | not started — awaiting approval |
+| 3–24 | structure → liquidity → probability → decisions → backtest → paper → live | not started |
 
-No application code exists yet. Read the docs in this order:
+## Quick start
+
+```bash
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                                 # optional; defaults work
+
+python main.py status                                # environment + cache state
+
+# With MT5 (Windows, terminal open and logged in):
+python main.py symbols --search XAU
+python main.py ingest  --symbol XAUUSDm --tf M5 --bars 200000
+
+# Without MT5 (any OS) -- from a CSV export, or generated sample data:
+python tools/make_synthetic_csv.py --out data/raw/XAUUSDm_M5.csv
+python main.py ingest  --symbol XAUUSDm --tf M5 --csv data/raw/XAUUSDm_M5.csv --digits 2
+python main.py inspect --symbol XAUUSDm --tf M5
+
+pytest
+```
+
+`ingest` normalizes to UTC, removes duplicates, quarantines impossible OHLC rows,
+records (never fills) missing bars, drops the forming candle, and caches to parquet.
+Re-running it appends only new bars and leaves existing rows byte-identical.
+
+## Documentation
 
 1. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — layers, data contract, look-ahead guards, weaknesses
 2. [`docs/SMC_DEFINITIONS.md`](docs/SMC_DEFINITIONS.md) — exact, computable rules for every SMC concept
 3. [`docs/PROBABILITY_METHODOLOGY.md`](docs/PROBABILITY_METHODOLOGY.md) — how probabilities are earned, not asserted
-4. [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md) — what gets built first
+4. [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md) — the data layer, as built and verified
 5. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
+6. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
+
+## Layout (Phase 1)
+
+```
+config/settings.py       paths, timeframes, broker offset, .env loading
+data/normalizer.py       the schema gate every module reads through
+data/csv_loader.py       CSV / TSV / Parquet, incl. MT5 export format
+data/mt5_connector.py    read-only MT5 access (import-guarded, Windows-only)
+data/cache.py            parquet cache + manifest, incremental merge
+tools/                   synthetic data generator (test scaffolding, not market data)
+tests/                   74 tests on frames with known-correct answers
+main.py                  ingest · inspect · symbols · status
+```
 
 ## Ground rules
 

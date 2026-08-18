@@ -1,0 +1,19 @@
+# secrets
+.env
+
+# local data (regenerate with `python main.py ingest`)
+data/cache/
+data/raw/
+data/quarantine/
+database/*.db
+database/*.db-wal
+database/*.db-shm
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
