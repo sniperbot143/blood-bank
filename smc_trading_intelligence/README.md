@@ -16,9 +16,10 @@ attached to every number.
 | phase | scope | status |
 |---|---|---|
 | 0 | Architecture, definitions, methodology | complete |
-| 1 | Data ingestion & normalization | **complete — 74 tests passing** |
-| 2 | Swing detection | not started — awaiting approval |
-| 3–24 | structure → liquidity → probability → decisions → backtest → paper → live | not started |
+| 1 | Data ingestion & normalization | complete |
+| 2 | Swing detection | **complete — 113 tests passing** |
+| 3 | Market structure (HH/HL/LH/LL, bias) | not started — awaiting approval |
+| 4–24 | BOS/CHOCH/MSS → liquidity → probability → decisions → backtest → paper → live | not started |
 
 ## Quick start
 
@@ -37,6 +38,7 @@ python main.py ingest  --symbol XAUUSDm --tf M5 --bars 200000
 python tools/make_synthetic_csv.py --out data/raw/XAUUSDm_M5.csv
 python main.py ingest  --symbol XAUUSDm --tf M5 --csv data/raw/XAUUSDm_M5.csv --digits 2
 python main.py inspect --symbol XAUUSDm --tf M5
+python main.py swings  --symbol XAUUSDm --tf M5 --last 6
 
 pytest
 ```
@@ -51,20 +53,24 @@ Re-running it appends only new bars and leaves existing rows byte-identical.
 2. [`docs/SMC_DEFINITIONS.md`](docs/SMC_DEFINITIONS.md) — exact, computable rules for every SMC concept
 3. [`docs/PROBABILITY_METHODOLOGY.md`](docs/PROBABILITY_METHODOLOGY.md) — how probabilities are earned, not asserted
 4. [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md) — the data layer, as built and verified
-5. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
-6. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
+5. [`docs/PHASE_2_PLAN.md`](docs/PHASE_2_PLAN.md) — the swing engine and the no-repaint proof
+6. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
+7. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
 
-## Layout (Phase 1)
+## Layout
 
 ```
 config/settings.py       paths, timeframes, broker offset, .env loading
+config/smc_rules.py      every SMC threshold, with a rules_hash
+common/indicators.py     causal primitives (true range, Wilder ATR)
 data/normalizer.py       the schema gate every module reads through
 data/csv_loader.py       CSV / TSV / Parquet, incl. MT5 export format
 data/mt5_connector.py    read-only MT5 access (import-guarded, Windows-only)
 data/cache.py            parquet cache + manifest, incremental merge
+structure/swings.py      swing detection; formed vs confirmed vs superseded
 tools/                   synthetic data generator (test scaffolding, not market data)
-tests/                   74 tests on frames with known-correct answers
-main.py                  ingest · inspect · symbols · status
+tests/                   113 tests, incl. the no-repaint oracle test
+main.py                  ingest · inspect · swings · symbols · status
 ```
 
 ## Ground rules

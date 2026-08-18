@@ -89,6 +89,7 @@ deterministic: same bars + same config ⇒ byte-identical signal JSON.
 ```
 smc_trading_intelligence/
 ├── config/          settings.py · smc_rules.py · probability_config.py
+├── common/          indicators.py            (shared causal primitives: ATR)
 ├── data/            mt5_connector.py · csv_loader.py · normalizer.py · cache.py
 ├── structure/       swings.py · market_structure.py · bos.py · choch.py · mss.py
 ├── liquidity/       levels.py · equal_levels.py · sweeps.py · sessions.py
@@ -110,10 +111,11 @@ smc_trading_intelligence/
 ```
 
 Dependency rule: `structure/`, `liquidity/`, `imbalance/`, `orderblocks/`,
-`context/` may import only `config/` + numpy/pandas. They never import
+`context/` may import only `config/`, `common/` + numpy/pandas. They never import
 `data/` (no I/O in detectors) and never import each other's *engines*, only
 each other's dataclasses. This keeps every detector unit-testable on a
-hand-built 30-bar synthetic frame.
+hand-built 30-bar synthetic frame. `common/` holds primitives several detectors
+need (ATR today); everything in it must be strictly causal and is tested as such.
 
 ---
 

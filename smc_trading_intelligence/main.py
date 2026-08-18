@@ -193,6 +193,67 @@ def cmd_inspect(args: argparse.Namespace, settings: Settings) -> int:
     return 0 if verdict == "PASS" else 1
 
 
+def cmd_swings(args: argparse.Namespace, settings: Settings) -> int:
+    from config.smc_rules import SMCRules, SwingConfig, SwingMode
+    from data.normalizer import closed_bars
+    from structure.swings import detect_swings
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+
+    rules = SMCRules(
+        atr_period=args.atr_period,
+        swing=SwingConfig(
+            mode=SwingMode(args.mode),
+            swing_left=args.left,
+            swing_right=args.right,
+            min_swing_atr=args.min_atr,
+        ),
+    )
+    series = detect_swings(frame, rules)
+
+    at = len(frame) - 1
+    if args.as_of is not None:
+        at = int(args.as_of) if str(args.as_of).lstrip("-").isdigit() else int(
+            frame.index.get_indexer([pd.Timestamp(args.as_of, tz="UTC")], method="ffill")[0]
+        )
+        if at < 0:
+            log.error("--as-of %s is before the first bar", args.as_of)
+            return 1
+
+    live = series.as_of(at)
+    print(f"symbol / timeframe : {series.symbol} {series.timeframe}")
+    print(f"bars analysed      : {len(frame):,}")
+    print(f"mode               : {rules.swing.mode.value} "
+          f"(left={rules.swing.swing_left}, right={rules.swing.swing_right}, "
+          f"min_swing_atr={rules.swing.min_swing_atr})")
+    print(f"rules hash         : {rules.rules_hash[:16]}...")
+    print(f"swings accepted    : {len(series.swings):,}")
+    print(f"candidates rejected: {len(series.rejected):,} {series.reject_counts()}")
+    print(f"state at bar       : {at} ({frame.index[at]:%Y-%m-%d %H:%M} UTC)")
+    print(f"live chain length  : {len(live):,}")
+    print(f"chain alternates   : {series.alternates(at)}")
+
+    if live and args.last:
+        print(f"\nlast {min(args.last, len(live))} live swings:")
+        print(f"  {'kind':<5} {'formed (UTC)':<17} {'price':>10} {'conf. bar':>10} {'ATR str':>8}")
+        for swing in live[-args.last:]:
+            print(f"  {swing.kind.value:<5} {swing.formed_at:%Y-%m-%d %H:%M} "
+                  f"{swing.price:>10.5f} {swing.confirmed_at_index:>10} "
+                  f"{swing.strength_atr:>8.2f}")
+
+    superseded = [s for s in series.swings if s.superseded_at_index is not None]
+    print(f"\nsuperseded (kept for history, not erased): {len(superseded):,}")
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -265,6 +326,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_ins.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
     p_ins.add_argument("--rows", type=int, default=5, help="head/tail rows to print (0 = none)")
     p_ins.set_defaults(func=cmd_inspect)
+
+    p_sw = sub.add_parser("swings", help="detect swing points on cached bars")
+    p_sw.add_argument("--symbol", required=True)
+    p_sw.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_sw.add_argument("--bars", type=int, default=None, help="use only the last N bars")
+    p_sw.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_sw.add_argument("--left", type=int, default=3)
+    p_sw.add_argument("--right", type=int, default=3)
+    p_sw.add_argument("--min-atr", type=float, default=0.5, dest="min_atr")
+    p_sw.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_sw.add_argument("--as-of", default=None,
+                      help="bar index or timestamp: show the chain as it was known then")
+    p_sw.add_argument("--last", type=int, default=10)
+    p_sw.set_defaults(func=cmd_swings)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)

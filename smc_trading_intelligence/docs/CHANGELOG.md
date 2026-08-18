@@ -2,6 +2,41 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [0.3.0] — 2026-08-18 — Phase 2: swing detection
+
+### Added
+- `common/indicators.py` — `true_range`, `wilder_atr` (SMA seed then Wilder
+  recursion, NaN until seeded, never back-filled), `rolling_median_causal`.
+  Everything in `common/` must be strictly causal and is tested as such.
+- `config/smc_rules.py` — `SwingConfig` (mode, left/right, `min_swing_atr`,
+  adaptive scaling, `reject_across_gaps`) and `SMCRules` with a `rules_hash`
+  fingerprint to be embedded in future signals.
+- `structure/swings.py` — `detect_swings()` in three modes (FRACTAL,
+  FIXED_LOOKBACK, ATR_ADAPTIVE). `SwingPoint` carries `formed_at_index` /
+  `confirmed_at_index` / `superseded_at_index`; `SwingSeries.as_of(t)` returns
+  the chain as known at bar `t`. Rejected candidates are retained with reasons
+  (`ATR_FILTER`, `NO_ATR`, `NOT_EXTREME`, `SPANS_GAP`).
+- `main.py swings` — inspect the chain, tune thresholds, and time-travel with
+  `--as-of`.
+- 39 new tests, including `tests/test_no_lookahead.py` (the oracle test).
+
+### Decisions locked
+- Supersession never deletes: a replaced swing records the bar at which it was
+  replaced, so historical state is reproducible rather than rewritten.
+- A plateau of equal highs resolves to its FIRST bar (strict left, non-strict
+  right); the later equal prints become equal-high liquidity in Phase 5.
+- Candidates before ATR is seeded are rejected, not accepted unfiltered.
+- Swings spanning a data gap are flagged, not discarded — this narrows the
+  blanket gap rule in ARCHITECTURE.md §4, which still holds from Phase 4 on.
+- Detectors may now import `common/` in addition to `config/` + numpy/pandas.
+
+### Verified
+- 113/113 tests pass.
+- Oracle test across 5 parameter sets: for every bar `t`, a fresh run over
+  `frame[:t+1]` equals the full run's `as_of(t)`. No repainting.
+- Live-replay test: no earlier bar's recorded state is ever rewritten.
+- 18,539 bars → 3,168 swings in 0.07 s (FRACTAL) / 0.14 s (ATR_ADAPTIVE).
+
 ## [0.2.0] — 2026-08-18 — Phase 1: data layer
 
 ### Added

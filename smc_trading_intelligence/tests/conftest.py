@@ -45,6 +45,63 @@ def make_raw_bars(
     return pd.DataFrame(rows)
 
 
+def make_frame(
+    highs: list[float],
+    lows: list[float],
+    *,
+    start: str = "2024-01-02 09:00",
+    minutes: int = 5,
+    symbol: str = "TESTm",
+    timeframe: str = "M5",
+) -> pd.DataFrame:
+    """A canonical closed-bar frame with an exactly specified high/low shape.
+
+    Opens and closes are placed inside each bar's range, so the frame passes
+    the normalizer's OHLC sanity checks.
+    """
+    from data.normalizer import normalize
+
+    assert len(highs) == len(lows)
+    if not highs:
+        return normalize(pd.DataFrame(), symbol=symbol, timeframe=timeframe).frame
+    index = pd.date_range(start=start, periods=len(highs), freq=f"{minutes}min")
+    rows = []
+    for ts, high, low in zip(index, highs, lows):
+        assert high >= low, f"high {high} < low {low}"
+        mid = (high + low) / 2
+        rows.append(
+            {
+                "time": ts,
+                "open": mid,
+                "high": high,
+                "low": low,
+                "close": mid,
+                "tick_volume": 100,
+                "spread": 10,
+            }
+        )
+    far_future = pd.Timestamp(index[-1], tz="UTC") + pd.Timedelta(days=365)
+    return normalize(
+        pd.DataFrame(rows), symbol=symbol, timeframe=timeframe, now=far_future
+    ).frame
+
+
+def zigzag(
+    legs: list[float], bars_per_leg: int = 4, spread: float = 0.4, first: float = 100.0
+) -> tuple[list[float], list[float]]:
+    """Build highs/lows tracing a path through the given turning-point prices."""
+    highs: list[float] = []
+    lows: list[float] = []
+    price = first
+    for target in legs:
+        for step in range(1, bars_per_leg + 1):
+            level = price + (target - price) * step / bars_per_leg
+            highs.append(round(level + spread, 4))
+            lows.append(round(level - spread, 4))
+        price = target
+    return highs, lows
+
+
 @pytest.fixture
 def raw_bars() -> pd.DataFrame:
     return make_raw_bars()

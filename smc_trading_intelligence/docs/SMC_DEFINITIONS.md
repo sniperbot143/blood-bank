@@ -22,10 +22,31 @@ Swing low is the mirror with lows.
 - **ATR filter:** a swing is discarded unless
   `|H_i - (opposite adjacent swing)| >= min_swing_atr * ATR_i` (default 0.5).
 - **Strength** = `(H_i - min(L over the L+R window)) / ATR_i`, stored for features.
-- Alternative modes: `FIXED_LOOKBACK` (rolling max/min), `ATR_ADAPTIVE`
-  (R grows with volatility). Config: `swing.mode`.
+- Alternative modes: `FIXED_LOOKBACK` (window extremum, ties allowed both sides),
+  `ATR_ADAPTIVE` (L and R scale with ATR ÷ its own rolling median, clamped to
+  `[adaptive_min_scale, adaptive_max_scale]`). Config: `swing.mode`.
+- **Plateau rule.** FRACTAL is strict on the left and non-strict on the right, so a
+  run of equal highs resolves to its **first** bar — the print that created the
+  level. The later equal highs are not lost; they become equal-high liquidity (§7).
 - Consecutive same-type swings without an intervening opposite swing are collapsed
-  to the more extreme one (prevents swing spam in trends).
+  to the more extreme one (prevents swing spam in trends). **The collapsed swing is
+  never deleted:** it records `superseded_at_index` = the confirmation bar of the
+  swing that replaced it, so "the chain as known at bar t" stays reproducible. A
+  same-kind candidate that is *not* more extreme is rejected outright
+  (`NOT_EXTREME`) and never enters the chain.
+- **ATR filter reference.** The "opposite adjacent swing" is the most recent *live*
+  swing of the opposite kind. When none exists yet (start of history), the fallback
+  is the candidate's own window excursion. If ATR is not yet seeded and
+  `min_swing_atr > 0`, the candidate is rejected (`NO_ATR`) rather than accepted
+  unfiltered.
+- **Gaps.** A swing whose window spans missing bars is *flagged* (`spans_gap`), not
+  discarded — otherwise every legitimate swing around a weekend close would vanish.
+  `swing.reject_across_gaps` (default `false`) makes the stricter choice available.
+  This narrows the blanket rule in ARCHITECTURE.md §4, which still applies to
+  break/displacement patterns from Phase 4 on.
+- Rejected candidates are retained with their reason (`ATR_FILTER`, `NO_ATR`,
+  `NOT_EXTREME`, `SPANS_GAP`) — silently dropped candidates hide bugs and make
+  `min_swing_atr` impossible to tune.
 
 ---
 
