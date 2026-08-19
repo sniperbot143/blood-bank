@@ -312,6 +312,36 @@ class RangeConfig(BaseModel):
         return self
 
 
+class RegimeConfig(BaseModel):
+    """Phase 11 -- market regime (docs/SMC_DEFINITIONS.md section 14)."""
+
+    model_config = {"frozen": True}
+
+    lookback: int = Field(default=500, ge=20, le=20000)
+    low_vol_percentile: float = Field(default=0.33, ge=0.0, le=1.0)
+    high_vol_percentile: float = Field(default=0.66, ge=0.0, le=1.0)
+    adx_period: int = Field(default=14, ge=2, le=200)
+    range_adx: float = Field(default=20.0, ge=0.0, le=100.0)
+    trend_adx: float = Field(default=30.0, ge=0.0, le=100.0)
+
+    @model_validator(mode="after")
+    def _check(self) -> RegimeConfig:
+        if self.low_vol_percentile > self.high_vol_percentile:
+            raise ValueError("low_vol_percentile must be <= high_vol_percentile")
+        if self.range_adx > self.trend_adx:
+            raise ValueError("range_adx must be <= trend_adx")
+        return self
+
+
+class MTFConfig(BaseModel):
+    """Phase 11 -- multi-timeframe engine (docs/SMC_DEFINITIONS.md section 23)."""
+
+    model_config = {"frozen": True}
+
+    higher_timeframes: list[str] = Field(default_factory=lambda: ["M15", "H1"])
+    htf_veto: bool = True        # a directly opposing HTF bias blocks a setup
+
+
 class SweepConfig(BaseModel):
     """Phase 6 -- liquidity sweeps (docs/SMC_DEFINITIONS.md section 8).
 
@@ -348,6 +378,8 @@ class SMCRules(BaseModel):
     fvg: FVGConfig = FVGConfig()
     order_blocks: OrderBlockConfig = OrderBlockConfig()
     dealing_range: RangeConfig = RangeConfig()
+    regime: RegimeConfig = RegimeConfig()
+    mtf: MTFConfig = MTFConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""
