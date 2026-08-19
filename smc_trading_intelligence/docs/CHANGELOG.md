@@ -2,6 +2,30 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [0.7.0] — 2026-08-19 — Phase 6: liquidity sweeps
+
+### Added
+- `liquidity/sweeps.py` — `detect_sweeps()`: penetration of an INTACT pool
+  beyond `min_penetration_atr`, bounded by `max_penetration_atr` (deeper is a
+  BREAKOUT, counted separately), with a rejection close back on the origin side
+  within `confirm_bars`. Measures magnitude/ATR, rejection/ATR, close location,
+  bars-to-reject, pool strength and touches, volume ratio, distance from
+  structure and session — the feature block Phase 12 consumes.
+- `structure/breaks.py` — `mss_require_swept_origin` is now enforceable: pass a
+  `SweepSeries` and a bearish MSS requires a recent BUY_SIDE sweep (mirror for
+  bullish). Without sweeps supplied the check is skipped, not silently failed.
+- `config/smc_rules.py` — `SweepConfig`; `main.py sweeps`; 12 new tests.
+
+### Verified
+- 244/244 tests pass. A sweep is never known before its rejection bar
+  (per-bar truncation test).
+- 18,539 bars → 175 sweeps from 2,414 pools (7.2%), split 91 buy-side / 84
+  sell-side, in 0.77 s.
+
+### Noted
+- Sweep rate 7.2% against a 95% eventual-consumption rate is the first
+  genuinely selective signal in the system.
+
 ## [0.6.0] — 2026-08-19 — Phase 5: liquidity pools & sessions
 
 ### Added

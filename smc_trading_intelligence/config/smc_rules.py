@@ -244,6 +244,26 @@ class LiquidityConfig(BaseModel):
     strength_per_extra_member: float = Field(default=0.50, ge=0.0, le=5.0)
 
 
+class SweepConfig(BaseModel):
+    """Phase 6 -- liquidity sweeps (docs/SMC_DEFINITIONS.md section 8).
+
+    A sweep is: liquidity exists + price trades through it + price rejects.
+    All three are required; two of them is just a level being broken.
+    """
+
+    model_config = {"frozen": True}
+
+    min_penetration_atr: float = Field(default=0.02, ge=0.0, le=5.0)
+    max_penetration_atr: float = Field(default=1.5, gt=0.0, le=20.0)
+    confirm_bars: int = Field(default=2, ge=0, le=50)
+    max_close_location: float = Field(default=0.40, ge=0.0, le=1.0)
+    require_close_back: bool = True
+    min_pool_strength: float = Field(default=0.0, ge=0.0, le=20.0)
+
+    # How far back an MSS may look for the sweep that originated its move.
+    origin_lookback_bars: int = Field(default=20, ge=0, le=500)
+
+
 class SMCRules(BaseModel):
     """Top-level rule set. Later phases add their sections here."""
 
@@ -256,6 +276,7 @@ class SMCRules(BaseModel):
     breaks: BreakConfig = BreakConfig()
     sessions: SessionConfig = SessionConfig()
     liquidity: LiquidityConfig = LiquidityConfig()
+    sweeps: SweepConfig = SweepConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""

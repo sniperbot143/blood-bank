@@ -173,12 +173,31 @@ def _is_valid_structural_level(ordinal: int | None, config: BreakConfig) -> bool
 
 # ---------------------------------------------------------------- engine
 
+def _origin_ok(sweeps, direction: Direction, index: int, rules: SMCRules) -> bool:
+    """MSS origin test (SMC_DEFINITIONS §5.4): did the move start from a sweep?
+
+    A bearish shift should originate from buy-side liquidity being taken --
+    stops above the highs swept, then the reversal. Enforced only when
+    `mss_require_swept_origin` is on AND a SweepSeries was supplied; without
+    sweeps the requirement cannot be judged, so it is skipped rather than
+    silently failed.
+    """
+    if not rules.breaks.mss_require_swept_origin or sweeps is None:
+        return True
+    from liquidity.sweeps import SweepType
+
+    wanted = (SweepType.BUY_SIDE_SWEEP if direction is Direction.BEARISH
+              else SweepType.SELL_SIDE_SWEEP)
+    return bool(sweeps.recent(index, rules.sweeps.origin_lookback_bars, wanted))
+
+
 def detect_breaks(
     frame: pd.DataFrame,
     structure: MarketStructure,
     rules: SMCRules = DEFAULT_RULES,
     *,
     atr: pd.Series | None = None,
+    sweeps=None,
 ) -> BreakSeries:
     """Forward pass over closed bars, emitting BOS / CHOCH / MSS.
 
@@ -238,7 +257,7 @@ def detect_breaks(
                     valid = _is_valid_structural_level(
                         ordinal.get(pending.level_formed_index), config
                     )
-                    origin_ok = not config.mss_require_swept_origin  # Phase 6 supplies the real test
+                    origin_ok = _origin_ok(sweeps, pending.direction, t, rules)
                     if (np.isfinite(disp.score) and disp.score >= config.mss_min_displacement
                             and valid and origin_ok):
                         before = bias
@@ -298,7 +317,7 @@ def detect_breaks(
                         valid = _is_valid_structural_level(
                             ordinal.get(level_swing.formed_at_index), config)
                         if (np.isfinite(disp.score) and disp.score >= config.mss_min_displacement
-                                and valid and not config.mss_require_swept_origin):
+                                and valid and _origin_ok(sweeps, against, t, rules)):
                             bias = against.bias
                             series.events.append(BreakEvent(
                                 type=BreakType.MSS, direction=against, index=t,

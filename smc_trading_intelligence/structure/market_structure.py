@@ -523,6 +523,7 @@ def build_structure(
     *,
     atr: pd.Series | None = None,
     with_breaks: bool = False,
+    sweeps=None,
 ) -> MarketStructure:
     """Convenience: detect external (and internal) swings and analyse both.
 
@@ -545,5 +546,7 @@ def build_structure(
     if with_breaks:
         from structure.breaks import detect_breaks   # local: breaks imports this module
 
-        external.attach_breaks(detect_breaks(frame, external, rules, atr=atr_series))
+        external.attach_breaks(
+            detect_breaks(frame, external, rules, atr=atr_series, sweeps=sweeps)
+        )
     return external

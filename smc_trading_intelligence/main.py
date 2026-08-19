@@ -9,6 +9,7 @@ Read-only analysis. No order is ever placed by this program.
     python main.py structure --symbol XAUUSDm --tf M5
     python main.py breaks    --symbol XAUUSDm --tf M5
     python main.py liquidity --symbol XAUUSDm --tf M5
+    python main.py sweeps    --symbol XAUUSDm --tf M5
     python main.py symbols   --search XAU
     python main.py status
 """
@@ -477,6 +478,56 @@ def cmd_liquidity(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_sweeps(args: argparse.Namespace, settings: Settings) -> int:
+    from config.smc_rules import SMCRules, SweepConfig, SwingConfig
+    from data.normalizer import closed_bars
+    from liquidity.levels import build_liquidity
+    from liquidity.sweeps import detect_sweeps
+    from structure.market_structure import build_structure
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to analyse")
+        return 1
+
+    rules = SMCRules(
+        swing=SwingConfig(swing_left=args.left, swing_right=args.right,
+                          min_swing_atr=args.min_atr),
+        sweeps=SweepConfig(min_penetration_atr=args.min_pen, max_penetration_atr=args.max_pen,
+                           confirm_bars=args.confirm, max_close_location=args.max_close_loc),
+    )
+    liquidity = build_liquidity(frame, rules)
+    structure = build_structure(frame, rules)
+    sweeps = detect_sweeps(frame, liquidity, rules, structure=structure)
+
+    print(f"symbol / timeframe : {sweeps.symbol} {sweeps.timeframe}")
+    print(f"bars analysed      : {len(frame):,}")
+    print(f"pools scanned      : {len(liquidity.pools):,}")
+    print(f"sweeps             : {len(sweeps.events):,} {sweeps.type_counts()}")
+    print(f"rejected breakouts : {sweeps.rejected_breakouts:,} "
+          f"(penetration > {rules.sweeps.max_penetration_atr} x ATR)")
+    print(f"sweep rate         : {len(sweeps.events) / max(1, len(liquidity.pools)):.1%} of pools")
+    print(f"by pool kind       : {sweeps.counts()}")
+
+    if sweeps.events and args.last:
+        print(f"\nlast {min(args.last, len(sweeps.events))} sweeps:")
+        print(f"  {'type':<16} {'pool':<13} {'when (UTC)':<17} {'level':>10} "
+              f"{'mag':>5} {'rej':>5} {'bars':>4}  session")
+        for event in sweeps.events[-args.last:]:
+            print(f"  {event.type.value:<16} {event.pool_kind.value:<13} "
+                  f"{event.confirmed_at:%Y-%m-%d %H:%M} {event.level:>10.5f} "
+                  f"{event.magnitude_atr:>5.2f} {event.rejection_atr:>5.2f} "
+                  f"{event.bars_to_reject:>4}  {event.session or '-'}")
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -623,6 +674,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_lq.add_argument("--as-of", default=None, help="bar index or timestamp")
     p_lq.add_argument("--last", type=int, default=6, help="pools to show per side")
     p_lq.set_defaults(func=cmd_liquidity)
+
+    p_sw2 = sub.add_parser("sweeps", help="detect liquidity sweeps")
+    p_sw2.add_argument("--symbol", required=True)
+    p_sw2.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_sw2.add_argument("--bars", type=int, default=None)
+    p_sw2.add_argument("--left", type=int, default=5)
+    p_sw2.add_argument("--right", type=int, default=5)
+    p_sw2.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_sw2.add_argument("--min-pen", type=float, default=0.02, dest="min_pen")
+    p_sw2.add_argument("--max-pen", type=float, default=1.5, dest="max_pen")
+    p_sw2.add_argument("--confirm", type=int, default=2)
+    p_sw2.add_argument("--max-close-loc", type=float, default=0.40, dest="max_close_loc")
+    p_sw2.add_argument("--last", type=int, default=8)
+    p_sw2.set_defaults(func=cmd_sweeps)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)
