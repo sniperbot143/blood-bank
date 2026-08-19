@@ -2,6 +2,47 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [0.6.0] — 2026-08-19 — Phase 5: liquidity pools & sessions
+
+### Added
+- `liquidity/sessions.py` — session assignment in named timezones (DST-correct),
+  per-instance high/low/range/open/close, midnight-wrapping windows kept as one
+  instance, and a completeness rule so a forming session is never liquidity.
+- `liquidity/equal_levels.py` — ATR-tolerance clustering of same-kind swings with
+  growth-aware accessors (`price_at`, `member_count_at`, `tightness_at`).
+- `liquidity/levels.py` — ten pool kinds (swing, EQH/EQL, PDH/PDL, PWH/PWL,
+  session high/low) with side assignment, an INTACT/SWEPT/CONSUMED lifecycle,
+  touch counting, a configurable strength model, and `LiquidityMap` queries
+  (`known_at`, `intact_at`, `above`, `below`, `nearest_above/below`).
+- `config/smc_rules.py` — `SessionWindow`, `SessionConfig`, `LiquidityConfig`.
+- `main.py liquidity` — pool inventory, status counts, and the nearest pools
+  above and below price with distance, touches and strength.
+- 39 new tests (11 sessions + 23 liquidity + 5 liquidity oracle).
+
+### Decisions locked
+- Buy-side liquidity is ABOVE price, sell-side BELOW — so a swing high is a
+  BUY_SIDE pool.
+- A wick beyond a level on the same bar that closes through is CONSUMED, not
+  SWEPT. Sweeps require the close to come back.
+- Calendar and session pools are confirmed only once their period completes.
+- Equal-level clusters grow forward and never rewrite earlier state.
+- The strength model is an explicit heuristic with config weights, flagged for
+  empirical replacement rather than presented as fact.
+
+### Verified
+- 232/232 tests pass.
+- Liquidity oracle across 2 parameter sets: a fresh run over `frame[:t+1]`
+  reproduces every known pool's price, status, touches and member count.
+- Status transitions are monotone; cluster member counts are monotone.
+- DST: a Europe/London 08:00 window starts 08:00 UTC on 2024-03-29 and 07:00 UTC
+  on 2024-04-01.
+- 18,539 bars → 2,414 pools in 0.31 s.
+
+### Noted
+- 95% of pools end CONSUMED over this history. The base rate of "level
+  eventually broken" is very high, which Phase 6 must account for before
+  claiming a sweep means anything.
+
 ## [0.5.0] — 2026-08-18 — Phase 4: BOS / CHOCH / MSS
 
 ### Added

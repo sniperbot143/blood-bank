@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SwingMode(str, Enum):
@@ -143,6 +143,107 @@ class BreakConfig(BaseModel):
     mss_require_swept_origin: bool = False
 
 
+class SessionWindow(BaseModel):
+    """One trading session, defined in a named timezone so DST is handled.
+
+    `start`/`end` are local "HH:MM" strings. A window whose end is at or before
+    its start wraps past midnight.
+    """
+
+    model_config = {"frozen": True}
+
+    name: str
+    tz: str = "UTC"
+    start: str = "00:00"
+    end: str = "07:00"
+    enabled: bool = True
+
+    @field_validator("start", "end")
+    @classmethod
+    def _validate_time(cls, v: str) -> str:
+        try:
+            hour, minute = (int(part) for part in v.split(":"))
+        except ValueError as exc:
+            raise ValueError(f"time must be 'HH:MM', got {v!r}") from exc
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError(f"time out of range: {v!r}")
+        return f"{hour:02d}:{minute:02d}"
+
+    @property
+    def start_minutes(self) -> int:
+        hour, minute = (int(p) for p in self.start.split(":"))
+        return hour * 60 + minute
+
+    @property
+    def end_minutes(self) -> int:
+        hour, minute = (int(p) for p in self.end.split(":"))
+        return hour * 60 + minute
+
+    @property
+    def wraps_midnight(self) -> bool:
+        return self.end_minutes <= self.start_minutes
+
+
+DEFAULT_SESSIONS: list[SessionWindow] = [
+    SessionWindow(name="ASIAN", tz="UTC", start="00:00", end="07:00"),
+    SessionWindow(name="LONDON", tz="UTC", start="07:00", end="12:00"),
+    SessionWindow(name="NY_AM", tz="UTC", start="12:00", end="15:00"),
+    SessionWindow(name="NY_PM", tz="UTC", start="15:00", end="20:00"),
+]
+
+
+class SessionConfig(BaseModel):
+    """Phase 5 -- session windows (docs/SMC_DEFINITIONS.md section 13)."""
+
+    model_config = {"frozen": True}
+
+    windows: list[SessionWindow] = Field(default_factory=lambda: list(DEFAULT_SESSIONS))
+
+    @property
+    def active(self) -> list[SessionWindow]:
+        return [w for w in self.windows if w.enabled]
+
+
+class LiquidityConfig(BaseModel):
+    """Phase 5 -- liquidity pools (docs/SMC_DEFINITIONS.md section 7).
+
+    Every tolerance is ATR- or time-based, never a fixed pip count: the same
+    numbers have to behave on EURUSDm (0.0001 tick) and BTCUSDm (1.0 tick).
+    """
+
+    model_config = {"frozen": True}
+
+    track_swing_pools: bool = True
+    track_equal_levels: bool = True
+    track_daily: bool = True
+    track_weekly: bool = True
+    track_sessions: bool = True
+
+    # Equal highs/lows
+    equal_tolerance_atr: float = Field(default=0.10, ge=0.0, le=5.0)
+    equal_max_gap_bars: int = Field(default=50, ge=1, le=5000)
+    equal_min_members: int = Field(default=2, ge=2, le=10)
+
+    # Lifecycle
+    touch_tolerance_atr: float = Field(default=0.0, ge=0.0, le=1.0)
+    sweep_min_penetration_atr: float = Field(default=0.02, ge=0.0, le=5.0)
+
+    # Calendar levels. Broker days rarely start at 00:00 UTC.
+    day_start_hour: int = Field(default=0, ge=0, le=23)
+    week_start_weekday: int = Field(default=0, ge=0, le=6)   # 0 = Monday
+
+    # Strength model (docs/PHASE_5_PLAN.md §4). Bases by pool type, plus
+    # increments for each retest and each extra equal-level member.
+    strength_swing: float = Field(default=1.0, ge=0.0, le=10.0)
+    strength_equal: float = Field(default=2.0, ge=0.0, le=10.0)
+    strength_daily: float = Field(default=2.0, ge=0.0, le=10.0)
+    strength_weekly: float = Field(default=3.0, ge=0.0, le=10.0)
+    strength_session: float = Field(default=1.5, ge=0.0, le=10.0)
+    strength_per_touch: float = Field(default=0.25, ge=0.0, le=5.0)
+    strength_max_touches: int = Field(default=4, ge=0, le=50)
+    strength_per_extra_member: float = Field(default=0.50, ge=0.0, le=5.0)
+
+
 class SMCRules(BaseModel):
     """Top-level rule set. Later phases add their sections here."""
 
@@ -153,6 +254,8 @@ class SMCRules(BaseModel):
     structure: StructureConfig = StructureConfig()
     displacement: DisplacementConfig = DisplacementConfig()
     breaks: BreakConfig = BreakConfig()
+    sessions: SessionConfig = SessionConfig()
+    liquidity: LiquidityConfig = LiquidityConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""

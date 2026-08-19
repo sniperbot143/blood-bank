@@ -15,11 +15,13 @@ import pytest
 from config.smc_rules import (
     BOSMode,
     BreakConfig,
+    LiquidityConfig,
     SMCRules,
     StructureConfig,
     SwingConfig,
     SwingMode,
 )
+from liquidity.levels import build_liquidity
 from structure.breaks import detect_breaks
 from structure.market_structure import build_structure
 from structure.swings import detect_swings
@@ -231,3 +233,67 @@ def test_displacement_of_a_bar_never_changes():
         historical = displacement_at(frame, t, bullish=True,
                                      atr_value=float(full_atr.iloc[t]), config=config)
         assert live.score == historical.score
+
+
+# ------------------------------------------------------ Phase 5: liquidity
+
+def _pool_fingerprint(pools, index) -> list[tuple]:
+    return sorted(
+        (p.kind.value, p.confirmed_at_index, round(p.price_at(index), 6),
+         p.status_at(index).value, p.touch_count_at(index), p.member_count_at(index))
+        for p in pools
+    )
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        SMCRules(structure=StructureConfig(track_internal=False)),
+        SMCRules(swing=SwingConfig(swing_left=2, swing_right=2, min_swing_atr=0.0),
+                 structure=StructureConfig(track_internal=False),
+                 liquidity=LiquidityConfig(equal_tolerance_atr=0.3)),
+    ],
+    ids=["default", "fine_with_wide_equals"],
+)
+def test_liquidity_pools_never_repaint(rules):
+    """A pool's price, status, touches and member count must be as-of honest."""
+    frame = _random_walk_frame(180, seed=53)
+    full = build_liquidity(frame, rules)
+
+    for t in range(0, len(frame), 3):
+        live = build_liquidity(frame.iloc[: t + 1], rules)
+        assert _pool_fingerprint(live.known_at(t), t) == _pool_fingerprint(full.known_at(t), t), (
+            f"liquidity at bar {t} differs between a live run and history"
+        )
+
+
+def test_a_pool_is_never_known_before_the_bar_that_creates_it():
+    frame = _random_walk_frame(200, seed=59)
+    liquidity = build_liquidity(frame, SMCRules())
+
+    for pool in liquidity.pools:
+        assert pool.confirmed_at_index >= pool.created_at_index
+        assert not pool.is_known_at(pool.confirmed_at_index - 1)
+
+
+def test_pool_status_only_moves_forward():
+    """INTACT -> SWEPT -> CONSUMED, never backwards."""
+    order = {"INTACT": 0, "SWEPT": 1, "CONSUMED": 2}
+    frame = _random_walk_frame(200, seed=61)
+    liquidity = build_liquidity(frame, SMCRules())
+
+    for pool in liquidity.pools:
+        seen = [order[pool.status_at(t).value]
+                for t in range(pool.confirmed_at_index, len(frame))]
+        assert seen == sorted(seen)
+
+
+def test_equal_level_clusters_only_grow_forward():
+    frame = _random_walk_frame(200, seed=67)
+    liquidity = build_liquidity(frame, SMCRules())
+
+    for pool in liquidity.pools:
+        if pool.cluster is None:
+            continue
+        counts = [pool.member_count_at(t) for t in range(pool.confirmed_at_index, len(frame))]
+        assert counts == sorted(counts)

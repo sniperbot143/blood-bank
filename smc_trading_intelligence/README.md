@@ -19,9 +19,10 @@ attached to every number.
 | 1 | Data ingestion & normalization | complete |
 | 2 | Swing detection | complete |
 | 3 | Market structure (HH/HL/LH/LL, bias) | complete |
-| 4 | BOS / CHOCH / MSS (+ displacement v1) | **complete — 193 tests passing** |
-| 5 | Liquidity pools & equal levels | not started — awaiting approval |
-| 6–24 | sweeps → FVG/OB → probability → decisions → backtest → paper → live | not started |
+| 4 | BOS / CHOCH / MSS (+ displacement v1) | complete |
+| 5 | Liquidity pools, equal levels & sessions | **complete — 232 tests passing** |
+| 6 | Liquidity sweeps | not started — awaiting approval |
+| 7–24 | displacement v2 → FVG/OB → probability → decisions → backtest → paper → live | not started |
 
 ## Quick start
 
@@ -43,6 +44,7 @@ python main.py inspect --symbol XAUUSDm --tf M5
 python main.py swings  --symbol XAUUSDm --tf M5 --last 6
 python main.py structure --symbol XAUUSDm --tf M5 --min-atr 2.0
 python main.py breaks    --symbol XAUUSDm --tf M5 --last 6
+python main.py liquidity --symbol XAUUSDm --tf M5 --last 4
 
 pytest
 ```
@@ -60,8 +62,9 @@ Re-running it appends only new bars and leaves existing rows byte-identical.
 5. [`docs/PHASE_2_PLAN.md`](docs/PHASE_2_PLAN.md) — the swing engine and the no-repaint proof
 6. [`docs/PHASE_3_PLAN.md`](docs/PHASE_3_PLAN.md) — structure labels, protected levels, bias
 7. [`docs/PHASE_4_PLAN.md`](docs/PHASE_4_PLAN.md) — BOS vs CHOCH vs MSS, and displacement
-8. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
-9. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
+8. [`docs/PHASE_5_PLAN.md`](docs/PHASE_5_PLAN.md) — liquidity pools, lifecycle and sessions
+9. [`COST_AUDIT.md`](COST_AUDIT.md) — every dependency and its price (₹0 core)
+10. [`docs/CHANGELOG.md`](docs/CHANGELOG.md) · [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
 
 ## Layout
 
@@ -77,9 +80,11 @@ structure/swings.py      swing detection; formed vs confirmed vs superseded
 structure/market_structure.py  HH/HL/LH/LL, protected levels, bias timeline
 structure/displacement.py  per-bar thrust, ATR-normalised
 structure/breaks.py      BOS / CHOCH / MSS, break-confirmed bias
+liquidity/sessions.py    session windows, DST-correct
+liquidity/levels.py      liquidity pools and their lifecycle
 tools/                   synthetic data generator (test scaffolding, not market data)
-tests/                   193 tests, incl. the no-repaint oracle tests
-main.py                  ingest · inspect · swings · structure · breaks · symbols · status
+tests/                   232 tests, incl. the no-repaint oracle tests
+main.py                  ingest · inspect · swings · structure · breaks · liquidity · status
 ```
 
 ## Ground rules

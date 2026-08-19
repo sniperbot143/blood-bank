@@ -8,6 +8,7 @@ Read-only analysis. No order is ever placed by this program.
     python main.py swings    --symbol XAUUSDm --tf M5
     python main.py structure --symbol XAUUSDm --tf M5
     python main.py breaks    --symbol XAUUSDm --tf M5
+    python main.py liquidity --symbol XAUUSDm --tf M5
     python main.py symbols   --search XAU
     python main.py status
 """
@@ -407,6 +408,75 @@ def cmd_breaks(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_liquidity(args: argparse.Namespace, settings: Settings) -> int:
+    from config.smc_rules import LiquidityConfig, SMCRules, SwingConfig, SwingMode
+    from data.normalizer import closed_bars
+    from liquidity.levels import build_liquidity
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to analyse")
+        return 1
+
+    rules = SMCRules(
+        atr_period=args.atr_period,
+        swing=SwingConfig(mode=SwingMode(args.mode), swing_left=args.left,
+                          swing_right=args.right, min_swing_atr=args.min_atr),
+        liquidity=LiquidityConfig(
+            equal_tolerance_atr=args.equal_atr,
+            equal_max_gap_bars=args.equal_gap,
+            day_start_hour=args.day_start,
+            track_sessions=not args.no_sessions,
+        ),
+    )
+    liquidity = build_liquidity(frame, rules)
+
+    at = _resolve_bar(frame, args.as_of)
+    if at < 0:
+        log.error("--as-of %s is before the first bar", args.as_of)
+        return 1
+    price = float(frame["close"].iloc[at])
+
+    print(f"symbol / timeframe : {liquidity.symbol} {liquidity.timeframe}")
+    print(f"bars analysed      : {len(frame):,}")
+    print(f"rules hash         : {rules.rules_hash[:16]}...")
+    print(f"pools found        : {len(liquidity.pools):,}")
+    print(f"known at bar {at}   : {len(liquidity.known_at(at)):,} "
+          f"{liquidity.counts(at)}")
+    print(f"status             : {liquidity.status_counts(at)}")
+    print(f"sessions           : {liquidity.sessions.counts()}")
+
+    session = liquidity.sessions.session_at(at)
+    print(f"\nbar {at} ({frame.index[at]:%Y-%m-%d %H:%M} UTC) close {price:.5f}"
+          f"  session: {session or '-'}")
+
+    def show(title: str, pools: list) -> None:
+        if not pools:
+            return
+        print(f"\n{title}")
+        print(f"  {'kind':<13} {'price':>11} {'dist':>8} {'status':<9} "
+              f"{'touch':>5} {'str':>5}  origin")
+        for pool in pools[: args.last]:
+            pool_price = pool.price_at(at)
+            print(f"  {pool.kind.value:<13} {pool_price:>11.5f} "
+                  f"{abs(pool_price - price):>8.5f} {pool.status_at(at).value:<9} "
+                  f"{pool.touch_count_at(at):>5} {pool.strength_at(at):>5.2f}  {pool.origin}")
+
+    show("buy-side liquidity above price (nearest first):",
+         liquidity.above(price, at))
+    show("sell-side liquidity below price (nearest first):",
+         liquidity.below(price, at))
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -532,6 +602,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_br.add_argument("--as-of", default=None, help="bar index or timestamp")
     p_br.add_argument("--last", type=int, default=10)
     p_br.set_defaults(func=cmd_breaks)
+
+    p_lq = sub.add_parser("liquidity", help="map liquidity pools and their lifecycle")
+    p_lq.add_argument("--symbol", required=True)
+    p_lq.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_lq.add_argument("--bars", type=int, default=None)
+    p_lq.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_lq.add_argument("--left", type=int, default=5)
+    p_lq.add_argument("--right", type=int, default=5)
+    p_lq.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_lq.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_lq.add_argument("--equal-atr", type=float, default=0.10, dest="equal_atr",
+                      help="EQH/EQL tolerance in ATR")
+    p_lq.add_argument("--equal-gap", type=int, default=50, dest="equal_gap",
+                      help="max bars between equal-level members")
+    p_lq.add_argument("--day-start", type=int, default=0, dest="day_start",
+                      help="hour (UTC) the broker day starts")
+    p_lq.add_argument("--no-sessions", action="store_true")
+    p_lq.add_argument("--as-of", default=None, help="bar index or timestamp")
+    p_lq.add_argument("--last", type=int, default=6, help="pools to show per side")
+    p_lq.set_defaults(func=cmd_liquidity)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)

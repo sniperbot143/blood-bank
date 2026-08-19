@@ -201,9 +201,34 @@ a feature so its value can be measured later.
 Tolerances are always ATR- or percentage-based, never fixed pips — the same code
 must behave sanely on `EURUSDm` (0.0001 tick) and `BTCUSDm` (1.0 tick).
 
-Each pool carries: `price, type, side (BUY_SIDE above price / SELL_SIDE below),
-created_at, touch_count, status ∈ {INTACT, SWEPT, CONSUMED}, strength`
-(strength = touches + age-weighted equality tightness).
+Each pool carries: `price, kind, side (BUY_SIDE above price / SELL_SIDE below),
+created_at_index, confirmed_at_index, touch_indices, swept_at_index,
+consumed_at_index, strength`.
+
+**Lifecycle** (all queried as-of a bar, never mutated in place):
+
+- `INTACT` — price has not traded beyond the level since the pool formed.
+- `SWEPT` — a wick went beyond it by more than
+  `sweep_min_penetration_atr × ATR` (default 0.02) but the bar closed back on
+  the origin side.
+- `CONSUMED` — a bar **closed** beyond it. A wick that only occurs on the bar
+  that closes through is not a sweep; it is the level being taken out.
+
+**Confirmation timing.** A swing pool is known at the swing's
+`confirmed_at_index`; an `EQH`/`EQL` pool when its **second** member confirms;
+`PDH`/`PDL` at the first bar of the next day; a session pool at
+`session.end_index + 1`. Nothing is ever known while the period that creates it
+is still forming.
+
+**Cluster growth.** A third equal high joins its cluster and raises the pool's
+price and strength from its own confirmation bar onward. `price_at(t)` and
+`member_count_at(t)` see only members confirmed by `t`.
+
+**Strength** = `base(kind) + per_touch × min(touches, cap)`, plus
+`per_extra_member × (members − 2)` scaled by `(0.5 + 0.5 × tightness)` for equal
+levels. Bases: weekly 3.0 > daily 2.0 = equal 2.0 > session 1.5 > swing 1.0.
+This ordering is a stated heuristic, not a measured result — Phase 13+ should
+test whether it predicts anything and replace it if it does not.
 
 ---
 
@@ -308,9 +333,15 @@ this rather than hard-blocking it.
 | NY AM (killzone) | 12:00 – 15:00 |
 | NY PM | 15:00 – 20:00 |
 
-Per session we track high, low, range, range/ATR, open price, and whether the
-prior session's high/low has been swept. DST is handled by storing windows in a
-named tz (`Europe/London`, `America/New_York`) and converting per day.
+Per session we track high, low, range, open and close, plus the bar indices of
+the session's high and low. Windows are stored in a named tz
+(`UTC`, `Europe/London`, `America/New_York`) and converted per bar, so a local
+08:00 window shifts correctly in UTC when DST starts. A window whose end is at
+or before its start wraps past midnight and remains **one** session instance.
+
+A session is not complete until its last bar is in the past — a forming
+session's high and low are still moving, so they cannot be liquidity. The
+default windows deliberately leave 20:00–00:00 UTC uncovered.
 
 ---
 
