@@ -269,6 +269,49 @@ class FVGConfig(BaseModel):
     ifvg_reclaim_bars: int = Field(default=10, ge=1, le=200)
 
 
+class OBZone(str, Enum):
+    FULL_RANGE = "FULL_RANGE"       # high to low of the origin bar (default)
+    BODY = "BODY"                   # open to close
+    WICK_TO_BODY = "WICK_TO_BODY"   # the wick edge to the body edge
+
+
+class OrderBlockConfig(BaseModel):
+    """Phase 9 -- order blocks (docs/SMC_DEFINITIONS.md section 11)."""
+
+    model_config = {"frozen": True}
+
+    zone: OBZone = OBZone.FULL_RANGE
+    max_lookback: int = Field(default=5, ge=1, le=50)
+    min_size_atr: float = Field(default=0.20, ge=0.0, le=10.0)
+    min_displacement: float = Field(default=0.35, ge=0.0, le=1.0)
+
+    # Fraction of the zone price must trade into to count as mitigated.
+    mitigation_fill: float = Field(default=0.50, gt=0.0, le=1.0)
+
+    # A failed OB becomes a breaker only once price returns to it from the
+    # other side; this is how long that retest may take.
+    breaker_retest_bars: int = Field(default=50, ge=1, le=1000)
+    track_breakers: bool = True
+
+
+class RangeConfig(BaseModel):
+    """Phase 10 -- dealing range and premium/discount (sections 12, 22)."""
+
+    model_config = {"frozen": True}
+
+    min_range_atr: float = Field(default=2.0, ge=0.0, le=100.0)
+    equilibrium_band: float = Field(default=0.03, ge=0.0, le=0.5)
+    ote_low: float = Field(default=0.62, ge=0.0, le=1.0)
+    ote_high: float = Field(default=0.79, ge=0.0, le=1.0)
+    report_ote: bool = True
+
+    @model_validator(mode="after")
+    def _check(self) -> RangeConfig:
+        if self.ote_low > self.ote_high:
+            raise ValueError("ote_low must be <= ote_high")
+        return self
+
+
 class SweepConfig(BaseModel):
     """Phase 6 -- liquidity sweeps (docs/SMC_DEFINITIONS.md section 8).
 
@@ -303,6 +346,8 @@ class SMCRules(BaseModel):
     liquidity: LiquidityConfig = LiquidityConfig()
     sweeps: SweepConfig = SweepConfig()
     fvg: FVGConfig = FVGConfig()
+    order_blocks: OrderBlockConfig = OrderBlockConfig()
+    dealing_range: RangeConfig = RangeConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""
