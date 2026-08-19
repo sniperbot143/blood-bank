@@ -99,15 +99,23 @@ class DisplacementConfig(BaseModel):
 
     model_config = {"frozen": True}
 
-    body_weight: float = Field(default=0.50, ge=0.0, le=1.0)
-    range_weight: float = Field(default=0.25, ge=0.0, le=1.0)
-    close_weight: float = Field(default=0.25, ge=0.0, le=1.0)
-    imbalance_weight: float = Field(default=0.0, ge=0.0, le=1.0)  # Phase 8 turns this on
+    # Phase 8 switched the imbalance component on; these are the §6 weights.
+    # The change is visible in `rules_hash`, which is the whole point of
+    # keeping them in config rather than in code.
+    body_weight: float = Field(default=0.40, ge=0.0, le=1.0)
+    range_weight: float = Field(default=0.20, ge=0.0, le=1.0)
+    close_weight: float = Field(default=0.20, ge=0.0, le=1.0)
+    imbalance_weight: float = Field(default=0.20, ge=0.0, le=1.0)
 
     # Value of each raw measure at which its component scores a full 1.0.
     body_atr_full: float = Field(default=1.0, gt=0.0, le=20.0)
     range_atr_full: float = Field(default=1.5, gt=0.0, le=20.0)
     close_location_min: float = Field(default=0.70, ge=0.0, lt=1.0)
+
+    # Phase 7: a displacement leg may span several consecutive same-direction
+    # bars. The run ending at bar i is scored as one synthetic bar.
+    max_run_bars: int = Field(default=3, ge=1, le=20)
+    require_same_direction_run: bool = True
 
     weak_threshold: float = Field(default=0.35, ge=0.0, le=1.0)
     moderate_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
@@ -244,6 +252,23 @@ class LiquidityConfig(BaseModel):
     strength_per_extra_member: float = Field(default=0.50, ge=0.0, le=5.0)
 
 
+class FVGConfig(BaseModel):
+    """Phase 8 -- fair value gaps (docs/SMC_DEFINITIONS.md sections 9-10)."""
+
+    model_config = {"frozen": True}
+
+    min_size_atr: float = Field(default=0.10, ge=0.0, le=10.0)
+    require_displacement: bool = True
+    min_displacement: float = Field(default=0.35, ge=0.0, le=1.0)
+
+    # Fill fraction at which a gap counts as mitigated. 0.5 = consequent
+    # encroachment, the level most SMC traders actually defend.
+    mitigated_fill: float = Field(default=0.50, gt=0.0, le=1.0)
+
+    # IFVG: a gap fully invalidated by a close beyond it, then reclaimed.
+    ifvg_reclaim_bars: int = Field(default=10, ge=1, le=200)
+
+
 class SweepConfig(BaseModel):
     """Phase 6 -- liquidity sweeps (docs/SMC_DEFINITIONS.md section 8).
 
@@ -277,6 +302,7 @@ class SMCRules(BaseModel):
     sessions: SessionConfig = SessionConfig()
     liquidity: LiquidityConfig = LiquidityConfig()
     sweeps: SweepConfig = SweepConfig()
+    fvg: FVGConfig = FVGConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""

@@ -164,11 +164,11 @@ def test_every_mss_is_also_recorded_as_a_choch():
 
 def test_the_displacement_threshold_decides_choch_versus_mss():
     """Same bars, same CHOCH -- only the threshold decides if it is a reversal."""
-    frame = _uptrend_then_collapse(collapse_body=False)   # break bar scores ~0.40
+    frame = _uptrend_then_collapse(collapse_body=False)   # break bar scores ~0.32
 
     _, strict = _breaks(frame)                             # default threshold 0.55
     lenient = SMCRules(swing=RULES.swing, structure=RULES.structure,
-                       breaks=BreakConfig(mss_min_displacement=0.35))
+                       breaks=BreakConfig(mss_min_displacement=0.25))
     _, loose = _breaks(frame, lenient)
 
     assert not [e for e in strict.events if e.type is BreakType.MSS]

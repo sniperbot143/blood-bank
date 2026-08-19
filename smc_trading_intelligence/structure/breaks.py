@@ -30,7 +30,7 @@ import pandas as pd
 
 from common.indicators import wilder_atr
 from config.smc_rules import BOSMode, DEFAULT_RULES, BreakConfig, SMCRules
-from structure.displacement import UNKNOWN, Displacement, displacement_at
+from structure.displacement import UNKNOWN, Displacement, displacement_run_at
 from structure.market_structure import Bias, MarketStructure, iter_levels
 from structure.swings import SwingPoint
 
@@ -252,7 +252,7 @@ def detect_breaks(
                 broken, price = breaks_level(highs[t], lows[t], closes[t], pending.level,
                                              direction=pending.direction, mode=BOSMode.CLOSE_ONLY)
                 if broken:
-                    disp = displacement_at(frame, t, bullish=pending.direction is Direction.BULLISH,
+                    disp = displacement_run_at(frame, t, bullish=pending.direction is Direction.BULLISH,
                                            atr_value=atr_values[t], config=rules.displacement)
                     valid = _is_valid_structural_level(
                         ordinal.get(pending.level_formed_index), config
@@ -300,7 +300,7 @@ def detect_breaks(
                             broken_level_formed_index=level_swing.formed_at_index,
                             broken_level_time=level_swing.formed_at, break_price=price,
                             bias_before=before, bias_after=bias,
-                            displacement=displacement_at(
+                            displacement=displacement_run_at(
                                 frame, t, bullish=against is Direction.BULLISH,
                                 atr_value=atr_values[t], config=rules.displacement),
                             mode=BOSMode.CLOSE_ONLY,
@@ -358,7 +358,7 @@ def detect_breaks(
                     if not broken:
                         continue
 
-                    disp = displacement_at(frame, t, bullish=direction is Direction.BULLISH,
+                    disp = displacement_run_at(frame, t, bullish=direction is Direction.BULLISH,
                                            atr_value=atr_values[t], config=rules.displacement)
                     if (config.bos_mode is BOSMode.DISPLACEMENT_CONFIRMATION
                             and not (np.isfinite(disp.score)

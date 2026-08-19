@@ -40,6 +40,9 @@ class Displacement:
     close_location: float
     imbalance: float = 0.0
     atr: float = float("nan")
+    bars: int = 1                 # how many bars the scored leg spans
+    start_index: int | None = None
+    end_index: int | None = None
 
     @property
     def is_displacement(self) -> bool:
@@ -127,7 +130,77 @@ def displacement_at(
         close_location=float(location),
         imbalance=float(imbalance),
         atr=float(atr_value),
+        bars=1,
+        start_index=index,
+        end_index=index,
     )
+
+
+def displacement_run_at(
+    frame: pd.DataFrame,
+    index: int,
+    *,
+    bullish: bool,
+    atr_value: float,
+    config: DisplacementConfig,
+    imbalance: float = 0.0,
+) -> Displacement:
+    """Score the best same-direction RUN of bars ending at `index`.
+
+    Three 0.4-ATR bars in a row are a displacement leg; scoring only the last
+    one would miss it. Every candidate run ENDS at `index` and extends back at
+    most `max_run_bars`, so no information after `index` is used. The best
+    scoring run wins, and the single bar is always among the candidates.
+    """
+    if not np.isfinite(atr_value) or atr_value <= 0:
+        return UNKNOWN
+
+    best = displacement_at(frame, index, bullish=bullish, atr_value=atr_value,
+                           config=config, imbalance=imbalance)
+    if config.max_run_bars <= 1:
+        return best
+
+    opens = frame["open"].to_numpy(dtype="float64")
+    highs = frame["high"].to_numpy(dtype="float64")
+    lows = frame["low"].to_numpy(dtype="float64")
+    closes = frame["close"].to_numpy(dtype="float64")
+
+    for span in range(2, config.max_run_bars + 1):
+        start = index - span + 1
+        if start < 0:
+            break
+        if config.require_same_direction_run:
+            bodies = closes[start:index + 1] - opens[start:index + 1]
+            if bullish and not (bodies > 0).all():
+                break
+            if not bullish and not (bodies < 0).all():
+                break
+
+        run_open = float(opens[start])
+        run_close = float(closes[index])
+        run_high = float(highs[start:index + 1].max())
+        run_low = float(lows[start:index + 1].min())
+
+        directional_body = (run_close - run_open) if bullish else (run_open - run_close)
+        body_atr = directional_body / atr_value
+        range_atr = (run_high - run_low) / atr_value
+        location = close_location(run_open, run_high, run_low, run_close, bullish=bullish)
+
+        score = (
+            config.body_weight * _clamp01(body_atr / config.body_atr_full)
+            + config.range_weight * _clamp01(range_atr / config.range_atr_full)
+            + config.close_weight * _clamp01(
+                (location - config.close_location_min) / (1.0 - config.close_location_min))
+            + config.imbalance_weight * _clamp01(imbalance)
+        )
+        if score > best.score:
+            best = Displacement(
+                score=float(score), grade=classify(score, config),
+                body_atr=float(body_atr), range_atr=float(range_atr),
+                close_location=float(location), imbalance=float(imbalance),
+                atr=float(atr_value), bars=span, start_index=start, end_index=index,
+            )
+    return best
 
 
 def classify(score: float, config: DisplacementConfig) -> DisplacementClass:

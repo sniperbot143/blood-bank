@@ -128,15 +128,62 @@ def test_thresholds_must_be_ordered():
         DisplacementConfig(weak_threshold=0.9, moderate_threshold=0.5)
 
 
-def test_the_imbalance_component_is_off_until_phase_8():
-    """Its weight is 0.0 today, so passing an imbalance changes nothing yet."""
+def test_the_imbalance_component_counts_from_phase_8():
+    """Leaving an FVG behind is worth 20% of the score (SMC_DEFINITIONS §6)."""
     frame = _bar_frame(100.0, 101.5, 99.9, 101.4)
     without = displacement_at(frame, 0, bullish=True, atr_value=1.0, config=CONFIG)
     with_imb = displacement_at(frame, 0, bullish=True, atr_value=1.0, config=CONFIG,
                                imbalance=1.0)
-    assert without.score == with_imb.score
 
-    phase8 = DisplacementConfig(body_weight=0.40, range_weight=0.20,
-                                close_weight=0.20, imbalance_weight=0.20)
-    assert displacement_at(frame, 0, bullish=True, atr_value=1.0, config=phase8,
-                           imbalance=1.0).score > without.score
+    assert with_imb.score > without.score
+    assert with_imb.score - without.score == pytest.approx(CONFIG.imbalance_weight)
+
+    # ...and the pre-Phase-8 weighting is still expressible.
+    phase4 = DisplacementConfig(body_weight=0.50, range_weight=0.25,
+                                close_weight=0.25, imbalance_weight=0.0)
+    assert displacement_at(frame, 0, bullish=True, atr_value=1.0, config=phase4,
+                           imbalance=1.0).score == displacement_at(
+        frame, 0, bullish=True, atr_value=1.0, config=phase4).score
+
+
+def test_a_run_of_bars_can_displace_where_no_single_bar_does():
+    """Phase 7: three 0.5-ATR pushes in a row are a leg, not three nothings."""
+    from structure.displacement import displacement_run_at
+
+    frame = pd.DataFrame(
+        {"open": [100.0, 100.6, 101.2], "high": [100.7, 101.3, 101.9],
+         "low": [99.9, 100.5, 101.1], "close": [100.6, 101.2, 101.8]},
+        index=pd.date_range("2024-01-02 09:00", periods=3, freq="5min", tz="UTC"),
+    )
+    single = displacement_at(frame, 2, bullish=True, atr_value=1.0, config=CONFIG)
+    run = displacement_run_at(frame, 2, bullish=True, atr_value=1.0, config=CONFIG)
+
+    assert run.score > single.score
+    assert run.bars == 3
+    assert run.end_index == 2 and run.start_index == 0
+
+
+def test_a_run_never_looks_past_the_bar_it_ends_on():
+    from structure.displacement import displacement_run_at
+
+    frame = pd.DataFrame(
+        {"open": [100.0, 100.6, 101.2, 90.0], "high": [100.7, 101.3, 101.9, 102.0],
+         "low": [99.9, 100.5, 101.1, 89.0], "close": [100.6, 101.2, 101.8, 89.5]},
+        index=pd.date_range("2024-01-02 09:00", periods=4, freq="5min", tz="UTC"),
+    )
+    full = displacement_run_at(frame, 2, bullish=True, atr_value=1.0, config=CONFIG)
+    truncated = displacement_run_at(frame.iloc[:3], 2, bullish=True, atr_value=1.0,
+                                    config=CONFIG)
+    assert full.score == truncated.score
+
+
+def test_a_run_requires_a_consistent_direction():
+    from structure.displacement import displacement_run_at
+
+    frame = pd.DataFrame(
+        {"open": [101.0, 100.6, 101.2], "high": [101.2, 101.3, 101.9],
+         "low": [99.9, 100.5, 101.1], "close": [100.0, 101.2, 101.8]},  # bar 0 is down
+        index=pd.date_range("2024-01-02 09:00", periods=3, freq="5min", tz="UTC"),
+    )
+    run = displacement_run_at(frame, 2, bullish=True, atr_value=1.0, config=CONFIG)
+    assert run.bars <= 2
