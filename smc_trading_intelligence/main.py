@@ -11,6 +11,7 @@ Read-only analysis. No order is ever placed by this program.
     python main.py liquidity --symbol XAUUSDm --tf M5
     python main.py sweeps    --symbol XAUUSDm --tf M5
     python main.py build-db  --symbol XAUUSDm --tf M5
+    python main.py analyze   --symbol XAUUSDm --tf M5
     python main.py symbols   --search XAU
     python main.py status
 """
@@ -596,6 +597,82 @@ def cmd_build_db(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_analyze(args: argparse.Namespace, settings: Settings) -> int:
+    """The headline command: what should I do right now, and how sure is that?"""
+    import json
+
+    from config.decision_config import DecisionConfig
+    from config.probability_config import ProbabilityConfig
+    from data.normalizer import closed_bars
+    from database.models import SetupStore
+    from features.context import MarketContext
+    from probability.historical_stats import SimilarityKey
+    from probability.probability import estimate_probabilities, insufficient
+    from signals.confluence import score_setup
+    from signals.decision_engine import Decision, decide
+    from signals.setups import detect_setups
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to analyse")
+        return 1
+
+    rules = _analysis_rules(args)
+    context = MarketContext.build(frame, rules)
+    at = _resolve_bar(frame, args.as_of)
+    if at < 0:
+        log.error("--as-of %s is before the first bar", args.as_of)
+        return 1
+
+    setups = detect_setups(context, rules)
+    live = [c for c in setups.candidates if c.signal_index == at]
+    probability_config = ProbabilityConfig(min_samples=args.min_samples)
+    decision_config = DecisionConfig()
+
+    print(context.describe(at))
+    print()
+
+    if not live:
+        print("DECISION        : NO_TRADE")
+        print("REASONS         : NO_SETUP_AT_THIS_BAR")
+        recent = [c for c in setups.candidates if 0 <= at - c.signal_index <= 20]
+        if recent:
+            last = recent[-1]
+            print(f"(most recent candidate: {last.setup_type} at bar {last.signal_index})")
+        return 0
+
+    db_path = Path(args.db) if args.db else settings.db_path
+    store = SetupStore(db_path) if db_path.exists() else None
+
+    for candidate in live:
+        if store is not None:
+            estimates = estimate_probabilities(
+                store, SimilarityKey.from_candidate(candidate),
+                as_of=candidate.signal_time, config=probability_config,
+            )
+            estimate = estimates["tp1"]
+        else:
+            estimate = insufficient("tp1")
+            log.warning("no setup database at %s -- run build-db first", db_path)
+
+        signal = decide(candidate, estimate, score=score_setup(candidate, decision_config),
+                        config=decision_config, rules_hash=rules.rules_hash)
+        print(signal.describe())
+        if args.json:
+            print(json.dumps(signal.as_dict(), indent=2, default=str))
+
+    if store is not None:
+        store.close()
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -770,6 +847,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_db.add_argument("--db", default=None, help="database path (default: database/smc.db)")
     p_db.add_argument("--note", default="", help="free text stored with the run")
     p_db.set_defaults(func=cmd_build_db)
+
+    p_an = sub.add_parser("analyze", help="produce a decision for one bar")
+    p_an.add_argument("--symbol", required=True)
+    p_an.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_an.add_argument("--bars", type=int, default=None)
+    p_an.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_an.add_argument("--left", type=int, default=5)
+    p_an.add_argument("--right", type=int, default=5)
+    p_an.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_an.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_an.add_argument("--as-of", default=None, help="bar index or timestamp")
+    p_an.add_argument("--db", default=None)
+    p_an.add_argument("--min-samples", type=int, default=30, dest="min_samples")
+    p_an.add_argument("--json", action="store_true", help="also print the signal JSON")
+    p_an.set_defaults(func=cmd_analyze)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)
