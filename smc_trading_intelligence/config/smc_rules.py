@@ -342,6 +342,43 @@ class MTFConfig(BaseModel):
     htf_veto: bool = True        # a directly opposing HTF bias blocks a setup
 
 
+class SetupConfig(BaseModel):
+    """Phase 13 -- setup construction, entries, stops and targets."""
+
+    model_config = {"frozen": True}
+
+    # How recently the ingredients must have happened, in bars.
+    sweep_lookback: int = Field(default=20, ge=1, le=500)
+    break_lookback: int = Field(default=20, ge=1, le=500)
+    poi_max_distance_atr: float = Field(default=2.0, gt=0.0, le=50.0)
+
+    # Entry
+    entry_at_poi_mid: bool = True          # else the far edge of the zone
+    entry_valid_bars: int = Field(default=12, ge=1, le=500)
+
+    # Stop loss
+    stop_buffer_atr: float = Field(default=0.25, ge=0.0, le=10.0)
+    min_stop_atr: float = Field(default=0.20, gt=0.0, le=50.0)
+    max_stop_atr: float = Field(default=3.0, gt=0.0, le=100.0)
+
+    # Targets
+    tp1_rr: float = Field(default=1.5, gt=0.0, le=100.0)
+    tp2_rr: float = Field(default=3.0, gt=0.0, le=100.0)
+    tp3_rr: float = Field(default=5.0, gt=0.0, le=100.0)
+    prefer_liquidity_targets: bool = True
+    min_rr: float = Field(default=1.5, gt=0.0, le=100.0)
+
+    # Outcome labelling
+    max_hold_bars: int = Field(default=96, ge=1, le=10000)
+
+    # Costs, applied at labelling time so a gross-only edge cannot survive.
+    spread_cost_atr: float = Field(default=0.02, ge=0.0, le=5.0)
+    slippage_atr: float = Field(default=0.01, ge=0.0, le=5.0)
+
+    # One open setup per symbol/direction; later candidates are superseded.
+    deoverlap: bool = True
+
+
 class SweepConfig(BaseModel):
     """Phase 6 -- liquidity sweeps (docs/SMC_DEFINITIONS.md section 8).
 
@@ -380,6 +417,7 @@ class SMCRules(BaseModel):
     dealing_range: RangeConfig = RangeConfig()
     regime: RegimeConfig = RegimeConfig()
     mtf: MTFConfig = MTFConfig()
+    setups: SetupConfig = SetupConfig()
 
     def internal_swing_config(self) -> SwingConfig:
         """The finer swing setting used for internal structure."""

@@ -10,6 +10,7 @@ Read-only analysis. No order is ever placed by this program.
     python main.py breaks    --symbol XAUUSDm --tf M5
     python main.py liquidity --symbol XAUUSDm --tf M5
     python main.py sweeps    --symbol XAUUSDm --tf M5
+    python main.py build-db  --symbol XAUUSDm --tf M5
     python main.py symbols   --search XAU
     python main.py status
 """
@@ -528,6 +529,73 @@ def cmd_sweeps(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _analysis_rules(args: argparse.Namespace):
+    """The rule set shared by every analysis command."""
+    from config.smc_rules import SMCRules, StructureConfig, SwingConfig, SwingMode
+
+    return SMCRules(
+        atr_period=getattr(args, "atr_period", 14),
+        swing=SwingConfig(mode=SwingMode(getattr(args, "mode", "FRACTAL")),
+                          swing_left=args.left, swing_right=args.right,
+                          min_swing_atr=args.min_atr),
+        structure=StructureConfig(track_internal=False),
+    )
+
+
+def cmd_build_db(args: argparse.Namespace, settings: Settings) -> int:
+    """Replay history, generate every candidate, label it, and store it."""
+    import time
+
+    from backtesting.labeling import label_all, outcome_counts
+    from data.normalizer import closed_bars
+    from database.models import SetupStore
+    from features.context import MarketContext
+    from signals.setups import detect_setups
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to analyse")
+        return 1
+
+    rules = _analysis_rules(args)
+    started = time.perf_counter()
+    context = MarketContext.build(frame, rules)
+    setups = detect_setups(context, rules)
+    outcomes = label_all(frame, setups.candidates, rules.setups)
+    elapsed = time.perf_counter() - started
+
+    db_path = Path(args.db) if args.db else settings.db_path
+    with SetupStore(db_path) as store:
+        run_id = store.start_run(symbol=context.symbol, timeframe=context.timeframe,
+                                 rules_hash=rules.rules_hash, bars=len(frame),
+                                 first_bar=frame.index[0], last_bar=frame.index[-1],
+                                 note=args.note or "")
+        stats = store.save_many(run_id, setups.candidates, outcomes, rules.rules_hash)
+        total = store.count()
+        summary = store.summary()
+
+    print(f"symbol / timeframe : {context.symbol} {context.timeframe}")
+    print(f"bars replayed      : {len(frame):,}  ({elapsed:.1f}s)")
+    print(f"rules hash         : {rules.rules_hash[:16]}...")
+    print(f"candidates         : {len(setups.candidates):,} "
+          f"({len(setups.tradeable()):,} not superseded)")
+    print(f"by family          : {setups.counts()}")
+    print(f"rejected           : {setups.rejected}")
+    print(f"outcomes           : {outcome_counts(outcomes)}")
+    print(f"stored             : {stats.inserted:,} new, {stats.skipped:,} duplicates")
+    print(f"database           : {db_path} ({total:,} rows)")
+    if not summary.empty:
+        print(f"\n{summary.to_string(index=False)}")
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -688,6 +756,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_sw2.add_argument("--max-close-loc", type=float, default=0.40, dest="max_close_loc")
     p_sw2.add_argument("--last", type=int, default=8)
     p_sw2.set_defaults(func=cmd_sweeps)
+
+    p_db = sub.add_parser("build-db", help="replay history into the setup census")
+    p_db.add_argument("--symbol", required=True)
+    p_db.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_db.add_argument("--bars", type=int, default=None)
+    p_db.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_db.add_argument("--left", type=int, default=5)
+    p_db.add_argument("--right", type=int, default=5)
+    p_db.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_db.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_db.add_argument("--db", default=None, help="database path (default: database/smc.db)")
+    p_db.add_argument("--note", default="", help="free text stored with the run")
+    p_db.set_defaults(func=cmd_build_db)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)

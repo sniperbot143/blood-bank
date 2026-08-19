@@ -98,10 +98,28 @@ class SweepSeries:
     def known_at(self, index: int) -> list[SweepEvent]:
         return [e for e in self.events if e.confirmed_at_index <= index]
 
+    _last_any: list | None = None
+
     def last(self, index: int | None = None, type_: SweepType | None = None) -> SweepEvent | None:
         at = self.n_bars - 1 if index is None else index
+        if type_ is None:
+            if self._last_any is None:
+                cache: list = [None] * max(self.n_bars, 1)
+                current = None
+                cursor = 0
+                ordered = sorted(self.events, key=lambda e: e.confirmed_at_index)
+                for t in range(self.n_bars):
+                    while cursor < len(ordered) and ordered[cursor].confirmed_at_index <= t:
+                        current = ordered[cursor]
+                        cursor += 1
+                    cache[t] = current
+                self._last_any = cache
+            if not self.n_bars:
+                return None
+            return self._last_any[max(0, min(at, self.n_bars - 1))]
+
         for event in reversed(self.events):
-            if event.confirmed_at_index <= at and (type_ is None or event.type is type_):
+            if event.confirmed_at_index <= at and event.type is type_:
                 return event
         return None
 

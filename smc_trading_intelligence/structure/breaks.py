@@ -122,10 +122,29 @@ class BreakSeries:
             return Bias.RANGE
         return self.bias_by_bar[max(0, min(index, self.n_bars - 1))]
 
+    _last_any: list | None = None
+
     def last(self, type_: BreakType | None = None, index: int | None = None) -> BreakEvent | None:
         at = self.n_bars - 1 if index is None else index
+        if type_ is None:
+            # Hot path (every bar of every scan): cache the newest event per bar.
+            if self._last_any is None:
+                cache: list = [None] * max(self.n_bars, 1)
+                current = None
+                cursor = 0
+                ordered = sorted(self.events, key=lambda e: e.index)
+                for t in range(self.n_bars):
+                    while cursor < len(ordered) and ordered[cursor].index <= t:
+                        current = ordered[cursor]
+                        cursor += 1
+                    cache[t] = current
+                self._last_any = cache
+            if not self.n_bars:
+                return None
+            return self._last_any[max(0, min(at, self.n_bars - 1))]
+
         for event in reversed(self.events):
-            if event.index <= at and (type_ is None or event.type is type_):
+            if event.index <= at and event.type is type_:
                 return event
         return None
 

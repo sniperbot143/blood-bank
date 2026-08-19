@@ -360,6 +360,64 @@ class LevelSnapshot:
     swings_known: int
 
 
+def iter_states(structure: "MarketStructure", atr_values: np.ndarray,
+                timestamps: pd.DatetimeIndex):
+    """Every bar's StructureState in ONE pass instead of n calls to state_at.
+
+    Same definitions as `state_at`; `test_no_lookahead` asserts they agree.
+    Without this the whole pipeline is O(n^2) and a full history takes minutes.
+    """
+    ordered = sorted(structure.labels, key=lambda l: (l.confirmed_at_index, l.formed_at_index))
+    cursor = 0
+    highs: list[SwingPoint] = []
+    lows: list[SwingPoint] = []
+    last_high: LabelledSwing | None = None
+    last_low: LabelledSwing | None = None
+
+    for t in range(structure.n_bars):
+        while cursor < len(ordered) and ordered[cursor].confirmed_at_index <= t:
+            item = ordered[cursor]
+            if item.kind is SwingKind.HIGH:
+                highs.append(item.swing)
+                last_high = item
+            else:
+                lows.append(item.swing)
+                last_low = item
+            cursor += 1
+
+        structural_high = highs[-1] if highs else None
+        structural_low = lows[-1] if lows else None
+        atr_value = float(atr_values[t]) if t < len(atr_values) else float("nan")
+
+        range_width = float("nan")
+        range_width_atr = float("nan")
+        if structural_high is not None and structural_low is not None:
+            range_width = abs(structural_high.price - structural_low.price)
+            if np.isfinite(atr_value) and atr_value > 0:
+                range_width_atr = range_width / atr_value
+
+        bias, source = _bias_from(
+            last_high.label if last_high else None,
+            last_low.label if last_low else None,
+            range_width_atr, structure.config,
+        )
+        if structure.breaks is not None:
+            bias = structure.breaks.bias_at(t)
+            source = BiasSource.BOS_CONFIRMED
+
+        yield StructureState(
+            index=t, timestamp=timestamps[t] if t < len(timestamps) else None,
+            bias=bias, bias_source=source,
+            structural_high=structural_high, structural_low=structural_low,
+            protected_high=_last_formed_before(highs, structural_low),
+            protected_low=_last_formed_before(lows, structural_high),
+            last_high_label=last_high.label if last_high else None,
+            last_low_label=last_low.label if last_low else None,
+            range_width=range_width, range_width_atr=range_width_atr,
+            atr=atr_value, scope=structure.scope,
+        )
+
+
 def iter_levels(structure: "MarketStructure"):
     """Walk the levels bar by bar in one pass (O(n) instead of O(n^2)).
 

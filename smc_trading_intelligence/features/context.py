@@ -37,7 +37,12 @@ from structure.swings import SwingSeries
 
 @dataclass
 class Snapshot:
-    """Everything the engine knows at one bar. Nothing here postdates it."""
+    """Everything the engine knows at one bar. Nothing here postdates it.
+
+    The three collection fields are lazy: scanning every pool at every bar is
+    O(n x pools), which dominates a full-history run, and most consumers only
+    want the nearest one or two.
+    """
 
     index: int
     timestamp: pd.Timestamp
@@ -54,9 +59,19 @@ class Snapshot:
     htf_bias: dict[str, str]
     last_break: BreakEvent | None
     last_sweep: SweepEvent | None
-    active_fvgs: list[FairValueGap] = field(default_factory=list)
-    tradeable_obs: list[OrderBlock] = field(default_factory=list)
-    intact_pools: list[LiquidityPool] = field(default_factory=list)
+    _context: "MarketContext | None" = None
+
+    @property
+    def active_fvgs(self) -> list[FairValueGap]:
+        return self._context.fvgs.active_at(self.index) if self._context else []
+
+    @property
+    def tradeable_obs(self) -> list[OrderBlock]:
+        return self._context.order_blocks.tradeable_at(self.index) if self._context else []
+
+    @property
+    def intact_pools(self) -> list[LiquidityPool]:
+        return self._context.liquidity.intact_at(self.index) if self._context else []
 
 
 @dataclass
@@ -79,6 +94,7 @@ class MarketContext:
     mtf: MTFContext
     symbol: str = ""
     timeframe: str = ""
+    states: list[StructureState] = field(default_factory=list)
 
     @property
     def n_bars(self) -> int:
@@ -111,11 +127,15 @@ class MarketContext:
         regimes = build_regimes(frame, structure, rules, atr=atr)
         mtf = build_mtf(frame, rules=rules) if with_mtf else MTFContext(ltf_timeframe=timeframe)
 
+        from structure.market_structure import iter_states
+
+        states = list(iter_states(structure, atr.to_numpy("float64"), frame.index))
+
         return cls(
             frame=frame, rules=rules, atr=atr, swings=structure.swings, structure=structure,
             breaks=breaks, liquidity=liquidity, sweeps=sweeps, fvgs=fvgs, ifvgs=ifvgs,
             order_blocks=order_blocks, ranges=ranges, regimes=regimes, mtf=mtf,
-            symbol=symbol, timeframe=timeframe,
+            symbol=symbol, timeframe=timeframe, states=states,
         )
 
     # -- as-of accessors ---------------------------------------------------
@@ -133,23 +153,23 @@ class MarketContext:
         if not (0 <= index < self.n_bars):
             raise IndexError(f"bar {index} out of range for {self.n_bars} bars")
         row = self.frame.iloc[index]
+        state = (self.states[index] if index < len(self.states)
+                 else self.structure.state_at(index))
         return Snapshot(
             index=index,
             timestamp=self.frame.index[index],
             open=float(row["open"]), high=float(row["high"]),
             low=float(row["low"]), close=float(row["close"]),
             atr=self.atr_at(index),
-            bias=self.structure.bias_at(index),
-            structure=self.structure.state_at(index),
+            bias=state.bias,
+            structure=state,
             dealing_range=self.range_at(index),
             regime=self.regimes.at(index),
             session=self.liquidity.sessions.session_at(index),
             htf_bias=self.mtf.summary_at(index),
             last_break=self.breaks.last(index=index),
             last_sweep=self.sweeps.last(index=index),
-            active_fvgs=self.fvgs.active_at(index),
-            tradeable_obs=self.order_blocks.tradeable_at(index),
-            intact_pools=self.liquidity.intact_at(index),
+            _context=self,
         )
 
     def describe(self, index: int) -> str:

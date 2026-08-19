@@ -133,3 +133,56 @@ def tmp_settings(tmp_path) -> Settings:
     )
     s.ensure_dirs()
     return s
+
+
+def make_market_frame(
+    n: int = 900,
+    seed: int = 11,
+    start: str = "2024-01-02 00:00",
+    minutes: int = 5,
+    symbol: str = "TESTm",
+) -> pd.DataFrame:
+    """A synthetic series that actually contains SMC structure.
+
+    A plain random walk produces almost no fair value gaps, order blocks or
+    sweeps -- its bars are all the same size and never overshoot. This
+    generator alternates drift regimes, fires occasional impulse bars (which
+    leave imbalances and origin candles), and prints stop-run wicks beyond
+    recent extremes (which create sweeps). It is TEST SCAFFOLDING: never feed
+    it to the probability engine.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    price = 2000.0
+    drift = 0.0
+    highs: list[float] = []
+    lows: list[float] = []
+    opens: list[float] = []
+    closes: list[float] = []
+
+    for i in range(n):
+        if i % 60 == 0:                       # regime switch
+            drift = rng.choice([-0.35, -0.15, 0.0, 0.15, 0.35])
+        body = rng.normal(drift, 0.9)
+        if rng.random() < 0.06:               # impulse: leaves gaps and OBs
+            body *= rng.uniform(4.0, 7.0)
+
+        open_ = price
+        close = price + body
+        upper = abs(rng.normal(0.35, 0.3))
+        lower = abs(rng.normal(0.35, 0.3))
+        if rng.random() < 0.05:               # stop run beyond the recent extreme
+            if rng.random() < 0.5:
+                upper += abs(rng.normal(2.0, 0.8))
+            else:
+                lower += abs(rng.normal(2.0, 0.8))
+
+        high = max(open_, close) + upper
+        low = min(open_, close) - lower
+        highs.append(round(high, 3)); lows.append(round(low, 3))
+        opens.append(round(open_, 3)); closes.append(round(close, 3))
+        price = close
+
+    return make_frame(highs, lows, opens=opens, closes=closes,
+                      start=start, minutes=minutes, symbol=symbol)
