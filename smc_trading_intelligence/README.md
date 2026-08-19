@@ -13,7 +13,7 @@ attached to every number.
 
 ## Current status
 
-**All 24 phases complete. 394 tests passing.**
+**All 24 phases complete. 408 tests passing.**
 
 | phase | scope | status |
 |---|---|---|
@@ -62,7 +62,15 @@ python main.py status                                # environment + cache state
 python main.py symbols --search XAU
 python main.py ingest  --symbol XAUUSDm --tf M5 --bars 200000
 
-# Without MT5 (any OS) -- from a CSV export, or generated sample data:
+# Without MT5 (any OS) -- free real history from HistData.com.
+# Their MT export is headerless and in New York time (EST/EDT, WITH DST), so
+# name the layout and give the offset for the month: -4 in summer, -5 in winter.
+python main.py ingest --symbol XAUUSD --tf M1 \
+    --csv data/raw/DAT_MT_XAUUSD_M1_202607.csv \
+    --format histdata_mt --offset -4 --digits 3 --on-duplicate widest
+python main.py resample --symbol XAUUSD --source M1 --tf M5 --digits 3
+
+# Or generated sample data, for exercising the pipeline with no download:
 python tools/make_synthetic_csv.py --out data/raw/XAUUSDm_M5.csv
 python main.py ingest  --symbol XAUUSDm --tf M5 --csv data/raw/XAUUSDm_M5.csv --digits 2
 python main.py inspect --symbol XAUUSDm --tf M5
@@ -147,7 +155,7 @@ optional_ai/claude.py    optional narration; falls back to local, never fails
 execution/broker.py      the Broker interface and the paper implementation
 execution/live.py        live orders: three gates, disabled by default
 tools/                   synthetic data generator (test scaffolding, not market data)
-tests/                   394 tests, incl. the no-repaint oracle tests
+tests/                   408 tests, incl. the no-repaint oracle tests
 main.py                  ingest - analyze - chart - backtest - paper - preflight - status
 ```
 
@@ -181,3 +189,22 @@ assumptions, calibration error under target, and risk limits you set on purpose.
 Nothing in the analysis pipeline imports `execution/`. A test asserts it, by
 reading the source of the context and decision modules. Delete the directory and
 everything except live trading still runs.
+
+## What it says on real data
+
+One month of real XAUUSD M5 (HistData, July 2026 — 6,226 bars, 2,784 candidates,
+93 of them independent):
+
+| | |
+|---|---|
+| DETERMINISTIC backtest, 66 trades | 28.8% WR, +0.193R expectancy, PF 1.27 |
+| DECISION backtest | **0 trades** — 59 vetoed `LOW_RELIABILITY_VERY_LOW` |
+| Walk-forward, out-of-sample | **0 trades** across all 4 folds |
+
+That is the engine working. 93 independent setups from one month of one
+instrument is not a sample you can estimate a probability from, and the system
+is built to say so rather than to produce a number anyway. The deterministic
+row is what the setups did on overlapping trades in a single month — it is a
+sanity check that the plumbing works, not an edge.
+
+The fix is more history, not looser thresholds.

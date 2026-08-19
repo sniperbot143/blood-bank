@@ -208,3 +208,65 @@ def test_report_summary_is_human_readable(raw_bars):
     report = normalize(raw_bars, symbol="XAUUSDm", timeframe="M5", now=NOW).report
     text = report.summary()
     assert "XAUUSDm M5" in text and "duplicates removed: 0" in text
+
+
+# --------------------------------------------------------- duplicate policy
+
+def _interleaved_pair() -> pd.DataFrame:
+    """The HistData artifact: a real bar and a flat filler share a stamp.
+
+    The filler lands on either side of the real row depending on the minute,
+    so position alone cannot tell you which to keep.
+    """
+    return pd.DataFrame({
+        "timestamp": ["2026-07-01 07:43", "2026-07-01 07:43",
+                      "2026-07-01 07:44", "2026-07-01 07:44"],
+        "open":  [4024.725, 4031.645, 4031.245, 4031.485],
+        "high":  [4031.215, 4031.645, 4031.245, 4031.615],
+        "low":   [4024.575, 4031.645, 4031.245, 4028.755],
+        "close": [4031.065, 4031.645, 4031.245, 4028.965],
+        "tick_volume": [0, 0, 0, 0],
+    })
+
+
+def test_keep_last_can_discard_the_real_bar_for_a_flat_one():
+    """Documents the trap: position-based dedup is a coin flip on this data."""
+    result = normalize(_interleaved_pair(), symbol="XAUUSD", timeframe="M1",
+                       drop_forming=False, on_duplicate="last")
+    frame = result.frame
+
+    assert result.report.duplicates_removed == 2
+    first = frame.iloc[0]
+    assert first["high"] == first["low"]          # the flat filler survived
+
+
+def test_widest_keeps_the_bar_that_carries_information():
+    result = normalize(_interleaved_pair(), symbol="XAUUSD", timeframe="M1",
+                       drop_forming=False, on_duplicate="widest")
+    frame = result.frame
+
+    assert result.report.duplicates_removed == 2
+    assert len(frame) == 2
+    assert not (frame["high"] == frame["low"]).any()
+    assert frame.iloc[0]["high"] == pytest.approx(4031.215)
+    assert frame.iloc[1]["low"] == pytest.approx(4028.755)
+
+
+def test_first_keeps_the_earlier_row():
+    result = normalize(_interleaved_pair(), symbol="XAUUSD", timeframe="M1",
+                       drop_forming=False, on_duplicate="first")
+    assert result.frame.iloc[0]["high"] == pytest.approx(4031.215)
+
+
+def test_every_policy_leaves_a_unique_sorted_index():
+    for policy in ("first", "last", "widest"):
+        frame = normalize(_interleaved_pair(), symbol="XAUUSD", timeframe="M1",
+                          drop_forming=False, on_duplicate=policy).frame
+        assert not frame.index.has_duplicates, policy
+        assert frame.index.is_monotonic_increasing, policy
+
+
+def test_an_unknown_duplicate_policy_is_refused():
+    with pytest.raises(NormalizationError, match="unknown duplicate policy"):
+        normalize(_interleaved_pair(), symbol="XAUUSD", timeframe="M1",
+                  drop_forming=False, on_duplicate="whichever")

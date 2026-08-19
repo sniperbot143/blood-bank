@@ -2,6 +2,60 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [1.1.0] — 2026-08-19 — First real market data
+
+### Added
+- `data/csv_loader.py` — headerless CSV support via named `LAYOUTS`
+  (`histdata_mt`, `ohlcv`, `ohlc`) and `main.py ingest --format`. A headerless
+  file without `--format` is now a clear error naming the layouts, instead of
+  silently reading the first price row as column names.
+- `data/normalizer.py` — `on_duplicate` policy (`last` / `first` / `widest`),
+  exposed as `ingest --on-duplicate`. Default is unchanged (`last`).
+- `main.py resample` — build a higher timeframe from cached bars (M1 → M5 →
+  M15 → H1), reusing the tested complete-bucket rule so a partial bucket can
+  never become a bar.
+
+### Fixed
+- `context/mtf_bias.py` — when the completeness mask emptied the result,
+  `np.r_[False, <empty index>]` produced a length-1 array that replaced the
+  empty DatetimeIndex with a RangeIndex holding one all-NaN phantom bar. The
+  early `agg.empty` check ran before the mask and so never caught it. Now
+  re-checked after. Found by resampling to a timeframe the source could not
+  fill; it would have surfaced as a schema-validation failure far from the cause.
+
+### Verified — the first real data through the system
+- Source: HistData.com `DAT_MT_XAUUSD_M1_202607.csv`, XAUUSD M1, July 2026,
+  31,414 raw rows. Free, and the closest thing to MT5 history available without
+  Windows.
+- **Timezone confirmed from the data, not assumed.** HistData MT files are New
+  York time; July is EDT, so `--offset -4`. The check: all 18 non-weekend gaps
+  land at 20:59 → 22:00 UTC, which is 16:59 → 18:00 New York — exactly the
+  daily break HistData's own report describes. A wrong offset moves those gaps.
+- **276 duplicate timestamps, and the file's stamps go backwards 138 times.**
+  The file interleaves degenerate filler bars (open=high=low=close) with real
+  ones. Of 264 duplicated stamps, 118 have the filler first and 111 have it
+  second — so position tells you nothing, and the default `last` policy was
+  discarding the real bar roughly half the time. `--on-duplicate widest` cuts
+  flat bars from 120 to 1.
+- 31,138 M1 bars → 6,226 M5, 2,074 M15, 517 H1.
+- Census (`database/xauusd_real.db`, kept separate from the synthetic one):
+  2,784 candidates, **93 not superseded**, built in 8.3 s.
+- DETERMINISTIC backtest, 66 trades: 28.8% win rate, +0.193R expectancy,
+  PF 1.27, 12.7R total, max drawdown 13.2R, worst streak 9 losses.
+- DECISION backtest: **0 trades.** 59 vetoed LOW_RELIABILITY_VERY_LOW, 7
+  INSUFFICIENT_SAMPLE. Walk-forward: 0 out-of-sample trades across all 4 folds.
+- Monte Carlo on the 66 deterministic trades: IID median +11.5R, BLOCK median
+  +15.1R. The two agree here, unlike on the synthetic data — but on 66 trades
+  from one month neither number is evidence of anything.
+
+### Noted
+- One month is not a sample. 93 independent setups spread over 4 walk-forward
+  folds is why the decision engine takes nothing, and it is the correct answer,
+  not a threshold to lower. The deterministic +0.193R is measured on 66
+  overlapping trades from a single month of a single instrument.
+- Volume is 0 for every bar in the HistData MT format. Volume-derived features
+  are absent on this dataset, not zero-valued.
+
 ## [1.0.0] — 2026-08-19 — Phases 21-24: viewer, narration, paper and live
 
 ### Added

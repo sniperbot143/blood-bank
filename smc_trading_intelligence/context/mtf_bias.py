@@ -50,6 +50,11 @@ def resample_frame(frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     counts = frame.resample(rule, label="left", closed="left").size()
     complete = counts.reindex(agg.index).fillna(0) >= expected
     agg = agg[complete.to_numpy()]
+    if agg.empty:
+        # Every bucket was partial -- e.g. resampling to a timeframe the source
+        # cannot fill. Return early: the gap_before line below builds a
+        # length-1 array from an empty index and would resurrect a phantom bar.
+        return agg
 
     agg["spread"] = agg["spread"].round().astype("int32")
     agg["tick_volume"] = agg["tick_volume"].astype("int64")

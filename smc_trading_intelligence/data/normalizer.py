@@ -140,6 +140,55 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out.loc[:, ~out.columns.duplicated()]
 
 
+DUPLICATE_POLICIES = ("last", "first", "widest")
+
+
+def _drop_duplicates(df: pd.DataFrame, *, policy: str = "last") -> tuple[pd.DataFrame, int]:
+    """Collapse repeated timestamps to one bar each.
+
+    Two rows can claim the same minute for very different reasons, and the
+    right survivor depends on which:
+
+    `last` (default)
+        A feed re-sent the bar with more ticks in it. The later row is the
+        newer revision, so it wins. This is the MT5 case.
+
+    `first`
+        The opposite assumption: the first observation is authoritative and
+        anything after it is a re-send to ignore.
+
+    `widest`
+        Keep the row with the largest high-low range. Some historical exports
+        interleave degenerate filler bars (open=high=low=close) with the real
+        ones, and because the filler can land on either side of the real row,
+        position tells you nothing. Range does: a flat bar carries no
+        information a wider one does not.
+
+        The trade-off is real and worth stating -- if a feed narrows a bar to
+        correct a bad tick, `widest` keeps the bad tick. Use it for archive
+        files with known filler, not for a live feed.
+
+    Ties go to the later row under every policy.
+    """
+    if policy not in DUPLICATE_POLICIES:
+        raise NormalizationError(
+            f"unknown duplicate policy {policy!r}. Known: {list(DUPLICATE_POLICIES)}"
+        )
+    if not df.index.has_duplicates:
+        return df, 0
+
+    before = len(df)
+    if policy == "widest":
+        # Stable sort by range within each timestamp, then take the last: the
+        # widest bar, and among equal widths the later one.
+        order = np.argsort((df["high"] - df["low"]).to_numpy(), kind="stable")
+        ranked = df.iloc[order]
+        kept = ranked[~ranked.index.duplicated(keep="last")].sort_index(kind="stable")
+    else:
+        kept = df[~df.index.duplicated(keep=policy)]
+    return kept, before - len(kept)
+
+
 def _to_utc_index(
     values: pd.Series, *, broker_utc_offset_hours: float
 ) -> pd.DatetimeIndex:
@@ -221,6 +270,7 @@ def normalize(
     drop_forming: bool = True,
     now: pd.Timestamp | None = None,
     allow_nonpositive_prices: bool = False,
+    on_duplicate: str = "last",
 ) -> NormalizedBars:
     """Normalize a raw candle frame into the canonical schema.
 
@@ -263,12 +313,11 @@ def normalize(
             else default
         )
 
-    # Sort first so "keep last" on duplicates means the latest-known revision.
+    # Sort first (stable, so file order survives within a timestamp) -- then
+    # "last" means the latest-known revision of that bar.
     df = df.sort_index(kind="stable")
 
-    dup_mask = df.index.duplicated(keep="last")
-    report.duplicates_removed = int(dup_mask.sum())
-    df = df[~dup_mask]
+    df, report.duplicates_removed = _drop_duplicates(df, policy=on_duplicate)
 
     bad_mask = _bad_ohlc_mask(df, allow_nonpositive=allow_nonpositive_prices)
     report.bad_ohlc_quarantined = int(bad_mask.sum())

@@ -144,3 +144,34 @@ def test_paper_replays_without_a_database(env, capsys, caplog):
     assert "bars replayed" in out
     assert "orders placed" in out
     assert "no setup database" in caplog.text
+
+
+def test_resample_builds_a_higher_timeframe_from_cache(env, capsys):
+    cli.main(["ingest", "--symbol", "XAUUSDm", "--tf", "M5",
+              "--csv", _write_csv(env, n=100)])
+    capsys.readouterr()
+
+    assert cli.main(["resample", "--symbol", "XAUUSDm", "--source", "M5", "--tf", "M15"]) == 0
+    out = capsys.readouterr().out
+    assert "M5 -> M15" in out
+
+    frame = cache.read_bars("XAUUSDm", "M15", get_settings())
+    assert len(frame) == 33                     # 100 M5 bars -> 33 complete M15 buckets
+    assert frame["is_closed"].all()
+    assert cache.read_manifest("XAUUSDm", "M15", get_settings()).source == "resampled:M5"
+
+
+def test_resample_to_a_timeframe_the_source_cannot_fill_is_refused(env, caplog):
+    """M5-spaced bars mislabelled M1 fill no complete M5 bucket at all."""
+    cli.main(["ingest", "--symbol", "XAUUSDm", "--tf", "M1",
+              "--csv", _write_csv(env, n=100)])
+
+    assert cli.main(["resample", "--symbol", "XAUUSDm", "--source", "M1", "--tf", "M5"]) == 1
+    assert "no complete M5 buckets" in caplog.text
+
+
+def test_resample_refuses_to_go_downwards(env, caplog):
+    cli.main(["ingest", "--symbol", "XAUUSDm", "--tf", "M5", "--csv", _write_csv(env)])
+
+    assert cli.main(["resample", "--symbol", "XAUUSDm", "--source", "M5", "--tf", "M1"]) == 1
+    assert "must be higher than" in caplog.text

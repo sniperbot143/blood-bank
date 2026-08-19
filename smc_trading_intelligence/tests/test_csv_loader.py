@@ -86,3 +86,63 @@ def test_empty_file_raises(tmp_path):
     path.write_text("")
     with pytest.raises(NormalizationError, match="empty"):
         read_raw(path)
+
+
+# ----------------------------------------------- headerless files & layouts
+
+HISTDATA_SAMPLE = """2026.07.01,00:00,3980.635,3980.855,3979.335,3979.335,0
+2026.07.01,00:01,3979.285,3979.655,3977.445,3977.645,0
+2026.07.01,00:02,3977.835,3978.095,3975.355,3975.485,0
+"""
+
+
+def test_a_headerless_file_is_refused_until_its_columns_are_named(tmp_path):
+    from data.csv_loader import read_raw
+
+    path = tmp_path / "DAT_MT_XAUUSD_M1_202607.csv"
+    path.write_text(HISTDATA_SAMPLE)
+
+    with pytest.raises(NormalizationError, match="no header row"):
+        read_raw(path)
+
+
+def test_the_histdata_layout_reads_a_headerless_export(tmp_path):
+    from data.csv_loader import read_raw
+
+    path = tmp_path / "hist.csv"
+    path.write_text(HISTDATA_SAMPLE)
+
+    raw = read_raw(path, layout="histdata_mt")
+    assert len(raw) == 3
+    assert raw["timestamp"].iloc[0] == "2026.07.01 00:00"
+    assert raw["high"].iloc[0] == pytest.approx(3980.855)
+
+
+def test_a_layout_on_a_file_that_has_a_header_is_an_error(tmp_path):
+    from data.csv_loader import read_raw
+
+    path = tmp_path / "headed.csv"
+    path.write_text("timestamp,open,high,low,close\n2024-01-01 00:00,1,2,0.5,1.5\n")
+
+    with pytest.raises(NormalizationError, match="looks like it HAS a header"):
+        read_raw(path, layout="ohlc")
+
+
+def test_an_unknown_layout_names_the_ones_that_exist(tmp_path):
+    from data.csv_loader import read_raw
+
+    path = tmp_path / "hist.csv"
+    path.write_text(HISTDATA_SAMPLE)
+
+    with pytest.raises(NormalizationError, match="unknown layout"):
+        read_raw(path, layout="metatrader9000")
+
+
+def test_histdata_timestamps_convert_from_new_york_to_utc(tmp_path):
+    """HistData MT files are New York time; July is EDT, so UTC is +4."""
+    path = tmp_path / "hist.csv"
+    path.write_text(HISTDATA_SAMPLE)
+
+    result = load_csv(path, symbol="XAUUSD", timeframe="M1",
+                      broker_utc_offset_hours=-4, layout="histdata_mt")
+    assert result.frame.index[0] == pd.Timestamp("2026-07-01 04:00", tz="UTC")

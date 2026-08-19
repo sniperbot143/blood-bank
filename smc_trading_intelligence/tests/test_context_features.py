@@ -246,3 +246,19 @@ def test_features_are_reproducible_under_truncation():
     for key in ("bias", "regime_key", "pd_zone", "structure_event", "liquidity_event",
                 "poi_type", "confluence_count"):
         assert a[key] == b[key], key
+
+
+def test_resampling_to_a_bucket_nothing_can_fill_returns_an_empty_frame():
+    """Regression: the gap_before line used to resurrect a phantom bar.
+
+    `np.r_[False, <empty>]` is length 1, and assigning it to an empty frame
+    replaced the DatetimeIndex with a RangeIndex carrying one all-NaN row --
+    which then failed schema validation two calls later, far from the cause.
+    """
+    frame = _walk(30)                             # M5 bars...
+    frame = frame.assign(timeframe="M1")          # ...mislabelled as M1
+
+    out = resample_frame(frame, "M5")             # so no M5 bucket is complete
+
+    assert out.empty
+    assert isinstance(out.index, pd.DatetimeIndex)

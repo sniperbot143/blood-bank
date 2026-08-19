@@ -37,8 +37,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.settings import TIMEFRAMES, Settings, get_settings, get_timeframe  # noqa: E402
 from data import cache  # noqa: E402
-from data.csv_loader import load_csv  # noqa: E402
-from data.normalizer import NormalizationError, NormalizedBars, validate_frame  # noqa: E402
+from data.csv_loader import LAYOUTS as CSV_LAYOUTS, load_csv  # noqa: E402
+from data.normalizer import (  # noqa: E402
+    DUPLICATE_POLICIES,
+    NormalizationError,
+    NormalizedBars,
+    validate_frame,
+)
 
 log = logging.getLogger("smc")
 
@@ -84,6 +89,8 @@ def cmd_ingest(args: argparse.Namespace, settings: Settings) -> int:
             broker_utc_offset_hours=offset,
             digits=args.digits,
             drop_forming=drop_forming,
+            layout=args.format,
+            on_duplicate=args.on_duplicate,
         )
         source = f"csv:{Path(args.csv).name}"
         digits = args.digits
@@ -157,6 +164,47 @@ def cmd_ingest(args: argparse.Namespace, settings: Settings) -> int:
     path = settings.cache_path(symbol, tf)
     size_mb = path.stat().st_size / 1e6
     print(f"cached -> {path} ({size_mb:.1f} MB, {manifest.rows:,} bars total)")
+    return 0
+
+
+def cmd_resample(args: argparse.Namespace, settings: Settings) -> int:
+    """Build a higher timeframe from cached bars, e.g. M1 -> M5.
+
+    Only complete buckets survive: an M5 bar assembled from three M1 bars is
+    not an M5 bar, and around gaps that is exactly what you would get.
+    """
+    from context.mtf_bias import resample_frame
+
+    source_tf = get_timeframe(args.source).name
+    target_tf = get_timeframe(args.tf).name
+    if get_timeframe(target_tf).minutes <= get_timeframe(source_tf).minutes:
+        log.error("--tf %s must be higher than --source %s", target_tf, source_tf)
+        return 1
+
+    try:
+        frame = cache.read_bars(args.symbol, source_tf, settings)
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+
+    agg = resample_frame(frame, target_tf)
+    if agg.empty:
+        log.error("no complete %s buckets in %s bars of %s", target_tf, len(frame), source_tf)
+        return 1
+
+    ratio = get_timeframe(target_tf).minutes // get_timeframe(source_tf).minutes
+    dropped = len(frame) // ratio - len(agg)
+    manifest = cache.write_bars(
+        agg, symbol=args.symbol, timeframe=target_tf, settings=settings,
+        digits=args.digits, source=f"resampled:{source_tf}", merge=not args.no_merge,
+    )
+    print(f"{args.symbol} {source_tf} -> {target_tf}")
+    print(f"source bars       : {len(frame):,}")
+    print(f"complete buckets  : {len(agg):,}")
+    print(f"incomplete dropped: {max(dropped, 0):,} (gaps and session breaks)")
+    print(f"range (UTC)       : {agg.index[0]:%Y-%m-%d %H:%M} -> {agg.index[-1]:%Y-%m-%d %H:%M}")
+    print(f"cached -> {settings.cache_path(args.symbol, target_tf)} "
+          f"({manifest.rows:,} bars total)")
     return 0
 
 
@@ -1031,6 +1079,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_ing.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
     p_ing.add_argument("--bars", type=int, default=None, help="most recent N bars (MT5 mode)")
     p_ing.add_argument("--csv", default=None, help="load from CSV/TSV/Parquet instead of MT5")
+    p_ing.add_argument("--format", default=None, choices=sorted(CSV_LAYOUTS),
+                       help="column layout of a HEADERLESS csv, e.g. histdata_mt")
+    p_ing.add_argument("--on-duplicate", default="last", dest="on_duplicate",
+                       choices=list(DUPLICATE_POLICIES),
+                       help="which bar survives a repeated timestamp (see normalizer)")
     p_ing.add_argument("--start", default=None, help="ISO datetime, e.g. 2019-01-01")
     p_ing.add_argument("--end", default=None)
     p_ing.add_argument("--full", action="store_true", help="ignore cache, refetch from scratch")
@@ -1040,6 +1093,16 @@ def build_parser() -> argparse.ArgumentParser:
                        help="keep the unfinished bar (never use for signals)")
     p_ing.add_argument("--no-merge", action="store_true", help="overwrite the cache file")
     p_ing.set_defaults(func=cmd_ingest)
+
+    p_rs = sub.add_parser("resample", help="build a higher timeframe from cached bars")
+    p_rs.add_argument("--symbol", required=True)
+    p_rs.add_argument("--source", required=True, choices=sorted(TIMEFRAMES),
+                      help="the cached timeframe to read, e.g. M1")
+    p_rs.add_argument("--tf", required=True, choices=sorted(TIMEFRAMES),
+                      help="the timeframe to build, e.g. M5")
+    p_rs.add_argument("--digits", type=int, default=None)
+    p_rs.add_argument("--no-merge", action="store_true", help="overwrite the cache file")
+    p_rs.set_defaults(func=cmd_resample)
 
     p_ins = sub.add_parser("inspect", help="validate and describe a cached dataset")
     p_ins.add_argument("--symbol", required=True)
