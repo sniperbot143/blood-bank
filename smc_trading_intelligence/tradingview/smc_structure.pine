@@ -1,0 +1,185 @@
+//@version=6
+// =====================================================================
+// SMC Structure — companion visualisation for smc_trading_intelligence
+//
+// This is a VIEWER, not the engine. Python owns every number that matters:
+// probabilities, sample sizes, scores and decisions are computed there and
+// never here. This script exists so the deterministic markings can be checked
+// against a chart by eye.
+//
+// Free tier only: no request.security() on lower timeframes, no external
+// data, no paid features.
+//
+// NON-REPAINTING BY CONSTRUCTION
+//   A swing high at bar i is only drawn once `swingRight` further bars have
+//   closed, which is the same `confirmed_at_index` rule the Python engine
+//   uses. Levels are therefore plotted with an offset back to the bar they
+//   formed on, and nothing is ever drawn on the live bar.
+//
+// KNOWN LIMITATION: the parity of this script against the Python engine has
+// not been machine-verified — TradingView cannot be scripted from CI. Treat
+// disagreements as a bug report against whichever side is wrong, and trust
+// the Python engine, which has the oracle tests.
+// =====================================================================
+
+indicator("SMC Structure (smc_trading_intelligence)", overlay = true, max_boxes_count = 200, max_lines_count = 300, max_labels_count = 200)
+
+// ---------------------------------------------------------------- inputs
+grpSwing   = "Swings"
+swingLeft  = input.int(5,   "Swing left",  minval = 1, maxval = 50, group = grpSwing)
+swingRight = input.int(5,   "Swing right", minval = 1, maxval = 50, group = grpSwing)
+minSwingAtr= input.float(2.0,"Min swing size (ATR)", minval = 0.0, step = 0.1, group = grpSwing)
+atrLen     = input.int(14,  "ATR length", minval = 2, group = grpSwing)
+
+grpBreak   = "Structure"
+showBOS    = input.bool(true,  "Show BOS",   group = grpBreak)
+showCHOCH  = input.bool(true,  "Show CHOCH", group = grpBreak)
+showMSS    = input.bool(true,  "Show MSS",   group = grpBreak)
+minDisp    = input.float(0.55, "MSS min displacement", minval = 0.0, maxval = 1.0, step = 0.05, group = grpBreak)
+
+grpZones   = "Zones"
+showFVG    = input.bool(true, "Show fair value gaps", group = grpZones)
+showOB     = input.bool(true, "Show order blocks",    group = grpZones)
+showPD     = input.bool(true, "Show premium/discount",group = grpZones)
+minGapAtr  = input.float(0.10,"Min FVG size (ATR)", minval = 0.0, step = 0.05, group = grpZones)
+zoneLimit  = input.int(12,    "Max zones kept", minval = 1, maxval = 60, group = grpZones)
+
+cUp   = color.new(#26a69a, 0)
+cDown = color.new(#ef5350, 0)
+cBOS  = color.new(#42a5f5, 0)
+cCHOCH= color.new(#ffa726, 0)
+cMSS  = color.new(#ab47bc, 0)
+
+atr = ta.atr(atrLen)
+
+// ------------------------------------------------------------- swings
+// ta.pivothigh/low already delay by `swingRight` bars: the value returned on
+// the current bar describes the bar `swingRight` back. That delay IS the
+// confirmation rule, so nothing here can repaint.
+ph = ta.pivothigh(high, swingLeft, swingRight)
+pl = ta.pivotlow(low,  swingLeft, swingRight)
+
+var float lastHigh      = na
+var float lastLow       = na
+var int   lastHighBar   = na
+var int   lastLowBar    = na
+var float prevHigh      = na
+var float prevLow       = na
+
+// The size filter mirrors the Python `min_swing_atr` rule: a swing must stand
+// far enough from the opposite live swing to count as structure.
+newHigh = not na(ph) and (na(lastLow) or math.abs(ph - lastLow) >= minSwingAtr * atr)
+newLow  = not na(pl) and (na(lastHigh) or math.abs(lastHigh - pl) >= minSwingAtr * atr)
+
+if newHigh
+    prevHigh    := lastHigh
+    lastHigh    := ph
+    lastHighBar := bar_index - swingRight
+    label.new(bar_index - swingRight, ph, na.string(na) ? "" : (na(prevHigh) ? "H" : (ph > prevHigh ? "HH" : "LH")), style = label.style_label_down, color = color.new(cDown, 80), textcolor = cDown, size = size.tiny)
+
+if newLow
+    prevLow    := lastLow
+    lastLow    := pl
+    lastLowBar := bar_index - swingRight
+    label.new(bar_index - swingRight, pl, na(prevLow) ? "L" : (pl > prevLow ? "HL" : "LL"), style = label.style_label_up, color = color.new(cUp, 80), textcolor = cUp, size = size.tiny)
+
+// --------------------------------------------------------- displacement
+// Same components as the Python scorer, minus the imbalance term, which is
+// folded in below via `leavesGap`.
+bodyAtr  = math.abs(close - open) / atr
+rangeAtr = (high - low) / atr
+closeLoc = (high - low) > 0 ? (close > open ? (close - low) / (high - low) : (high - close) / (high - low)) : 0.0
+leavesGap = (low > high[2]) or (high < low[2])
+dispScore = 0.40 * math.min(bodyAtr / 1.0, 1.0) + 0.20 * math.min(rangeAtr / 1.5, 1.0) + 0.20 * math.max(math.min((closeLoc - 0.70) / 0.30, 1.0), 0.0) + 0.20 * (leavesGap ? 1.0 : 0.0)
+
+// ----------------------------------------------------- breaks of structure
+var float protectedLow  = na
+var float protectedHigh = na
+var int   biasState     = 0        // 1 bullish, -1 bearish, 0 range
+var float brokenHigh    = na
+var float brokenLow     = na
+
+bullBreak = not na(lastHigh) and close > lastHigh and lastHigh != brokenHigh
+bearBreak = not na(lastLow)  and close < lastLow  and lastLow  != brokenLow
+
+if bullBreak
+    isReversal = biasState == -1
+    isMSS      = isReversal and dispScore >= minDisp
+    brokenHigh := lastHigh
+    protectedLow := lastLow
+    biasState := isReversal and not isMSS ? 0 : 1
+    if isMSS and showMSS
+        line.new(lastHighBar, lastHigh, bar_index, lastHigh, color = cMSS, width = 2)
+        label.new(bar_index, lastHigh, "MSS", style = label.style_label_down, color = color.new(cMSS, 70), textcolor = cMSS, size = size.tiny)
+    else if isReversal and showCHOCH
+        line.new(lastHighBar, lastHigh, bar_index, lastHigh, color = cCHOCH, width = 1, style = line.style_dashed)
+        label.new(bar_index, lastHigh, "CHOCH", style = label.style_label_down, color = color.new(cCHOCH, 70), textcolor = cCHOCH, size = size.tiny)
+    else if showBOS
+        line.new(lastHighBar, lastHigh, bar_index, lastHigh, color = cBOS, width = 1)
+        label.new(bar_index, lastHigh, "BOS", style = label.style_label_down, color = color.new(cBOS, 70), textcolor = cBOS, size = size.tiny)
+
+if bearBreak
+    isReversal = biasState == 1
+    isMSS      = isReversal and dispScore >= minDisp
+    brokenLow := lastLow
+    protectedHigh := lastHigh
+    biasState := isReversal and not isMSS ? 0 : -1
+    if isMSS and showMSS
+        line.new(lastLowBar, lastLow, bar_index, lastLow, color = cMSS, width = 2)
+        label.new(bar_index, lastLow, "MSS", style = label.style_label_up, color = color.new(cMSS, 70), textcolor = cMSS, size = size.tiny)
+    else if isReversal and showCHOCH
+        line.new(lastLowBar, lastLow, bar_index, lastLow, color = cCHOCH, width = 1, style = line.style_dashed)
+        label.new(bar_index, lastLow, "CHOCH", style = label.style_label_up, color = color.new(cCHOCH, 70), textcolor = cCHOCH, size = size.tiny)
+    else if showBOS
+        line.new(lastLowBar, lastLow, bar_index, lastLow, color = cBOS, width = 1)
+        label.new(bar_index, lastLow, "BOS", style = label.style_label_up, color = color.new(cBOS, 70), textcolor = cBOS, size = size.tiny)
+
+// ------------------------------------------------------- fair value gaps
+var box[] gapBoxes = array.new_box()
+
+bullGap = low > high[2] and (low - high[2]) >= minGapAtr * atr
+bearGap = high < low[2] and (low[2] - high) >= minGapAtr * atr
+
+if showFVG and (bullGap or bearGap)
+    top    = bullGap ? low  : low[2]
+    bottom = bullGap ? high[2] : high
+    box b = box.new(bar_index - 2, top, bar_index + 20, bottom, border_color = color.new(bullGap ? cUp : cDown, 60), bgcolor = color.new(bullGap ? cUp : cDown, 88))
+    array.push(gapBoxes, b)
+    if array.size(gapBoxes) > zoneLimit
+        box.delete(array.shift(gapBoxes))
+
+// --------------------------------------------------------- order blocks
+// The last candle closing against a displaced break, same as the Python rule.
+var box[] obBoxes = array.new_box()
+
+if showOB and (bullBreak or bearBreak) and dispScore >= minDisp
+    int offset = na
+    for i = 0 to 5
+        bool against = bullBreak ? close[i] < open[i] : close[i] > open[i]
+        if na(offset) and against
+            offset := i
+    if not na(offset)
+        box b = box.new(bar_index - offset, high[offset], bar_index + 20, low[offset], border_color = color.new(bullBreak ? cUp : cDown, 40), bgcolor = color.new(bullBreak ? cUp : cDown, 82))
+        array.push(obBoxes, b)
+        if array.size(obBoxes) > zoneLimit
+            box.delete(array.shift(obBoxes))
+
+// ----------------------------------------------------- premium / discount
+equilibrium = not na(lastHigh) and not na(lastLow) ? (lastHigh + lastLow) / 2 : na
+plot(showPD ? equilibrium : na, "Equilibrium", color = color.new(color.gray, 40), style = plot.style_linebr)
+plot(showPD ? lastHigh : na, "Range high", color = color.new(cDown, 60), style = plot.style_linebr)
+plot(showPD ? lastLow  : na, "Range low",  color = color.new(cUp, 60),   style = plot.style_linebr)
+
+// --------------------------------------------------------------- panel
+var table panel = table.new(position.top_right, 2, 4, border_width = 1)
+if barstate.islast
+    biasText = biasState == 1 ? "BULLISH" : biasState == -1 ? "BEARISH" : "RANGE"
+    zoneText = na(equilibrium) ? "n/a" : (close > equilibrium ? "PREMIUM" : "DISCOUNT")
+    table.cell(panel, 0, 0, "bias",         text_size = size.small, text_color = color.gray)
+    table.cell(panel, 1, 0, biasText,       text_size = size.small, text_color = biasState == 1 ? cUp : biasState == -1 ? cDown : color.gray)
+    table.cell(panel, 0, 1, "zone",         text_size = size.small, text_color = color.gray)
+    table.cell(panel, 1, 1, zoneText,       text_size = size.small)
+    table.cell(panel, 0, 2, "displacement", text_size = size.small, text_color = color.gray)
+    table.cell(panel, 1, 2, str.tostring(dispScore, "#.00"), text_size = size.small)
+    table.cell(panel, 0, 3, "decisions",    text_size = size.small, text_color = color.gray)
+    table.cell(panel, 1, 3, "python only",  text_size = size.small, text_color = color.gray)

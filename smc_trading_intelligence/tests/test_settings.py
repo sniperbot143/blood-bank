@@ -70,3 +70,20 @@ def test_non_numeric_offset_env_fails_loudly(monkeypatch, tmp_path):
     monkeypatch.setenv("BROKER_UTC_OFFSET", "two hours")
     with pytest.raises(ValueError, match="must be a number"):
         load_settings(env_file=tmp_path / "nonexistent.env")
+
+
+def test_the_census_follows_data_dir(monkeypatch, tmp_path):
+    """A relocated dataset must not silently query the default database."""
+    monkeypatch.delenv("DB_PATH", raising=False)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    s = load_settings(env_file=tmp_path / "nonexistent.env")
+    assert s.db_path == tmp_path / "smc.db"
+
+
+def test_db_path_can_be_set_on_its_own(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "elsewhere" / "census.db"))
+
+    s = load_settings(env_file=tmp_path / "nonexistent.env")
+    assert s.db_path == tmp_path / "elsewhere" / "census.db"

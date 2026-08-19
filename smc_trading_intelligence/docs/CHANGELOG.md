@@ -2,6 +2,218 @@
 
 Format: newest first. One entry per phase or fix.
 
+## [1.0.0] — 2026-08-19 — Phases 21-24: viewer, narration, paper and live
+
+### Added
+- `tradingview/smc_structure.pine` (Phase 21) — a Pine v6 **viewer**, free tier
+  only. `ta.pivothigh/low` delay by `swingRight` bars, and that delay IS the
+  confirmation rule, so nothing repaints. Python owns every number; the script
+  prints "decisions: python only" rather than inventing a probability.
+- `optional_ai/claude.py` (Phase 22) — `narrate(signal)`. Requires BOTH
+  `ENABLE_CLAUDE=true` AND `ANTHROPIC_API_KEY`; either alone is off. The
+  response is never parsed back into the signal, the system prompt forbids
+  changing or inventing numbers, and any failure (no key, no package, no
+  network, rate limit, bad auth) returns `local_narration()` instead — same
+  headings, built from the engine's own reason codes. `Narration.source` says
+  which one you got.
+- `execution/broker.py` (Phase 23) — `Broker` ABC and `PaperBroker`: limit
+  orders with a bar expiry, fills against closed bars, the same pessimistic
+  intrabar rule as the labeller (a bar touching both target and stop is a
+  STOP, flagged `ambiguous bar: stop assumed first`), R and profit on settle,
+  and a JSONL journal of every PLACED/FILLED/CLOSED/EXPIRED event.
+- `execution/live.py` (Phase 24) — `LiveBroker`, disabled by default behind
+  three independent gates: `ENABLE_LIVE=true`, the literal
+  `confirm="I UNDERSTAND THIS PLACES REAL ORDERS"`, and a passing `preflight()`.
+  Gates are re-checked on construction AND on every order, so flipping the env
+  var mid-run cannot arm an object that already exists. Adds a daily-loss halt,
+  a `max_positions` cap, and `reconcile()` that re-reads the terminal rather
+  than trusting local memory. `preflight()` reports what a machine can check
+  and names the four preconditions only you can confirm.
+- `main.py paper` — replay cached bars through the paper broker, with a
+  decision breakdown and, when nothing is taken, the veto codes that explain
+  why. `main.py analyze --narrate` adds the written explanation.
+  `main.py preflight` prints the live-gate report and exits 1 while any gate
+  is shut.
+- `.env.example` — `ENABLE_LIVE` and `DB_PATH`.
+
+### Changed
+- `DATA_DIR` now relocates the setup census too (`db_path` follows it) unless
+  `DB_PATH` is set explicitly. Previously a relocated cache still queried the
+  default database, which is how a test run silently borrowed the real
+  18,539-bar census.
+- `main.py status` reports the live-trading and narration switches.
+
+### Verified
+- 394/394 tests pass.
+- `test_the_analysis_pipeline_does_not_import_live` inspects the source of
+  `features/context.py` and `signals/decision_engine.py` and fails if either
+  ever mentions `execution.live` or `LiveBroker`. Deleting `execution/` from
+  disk leaves the analysis system working.
+- All three live gates raise `LiveTradingDisabled` in isolation; the right
+  phrase with the flag off still raises, and so does the flag with no phrase.
+- `narrate()` with no key, and with a bogus key and no network, both return
+  `source="local"` with the full six-heading text and the error recorded.
+- `python main.py paper --symbol XAUUSDm --tf M5 --bars 2500` on the sample
+  history: 618 candidates, **0 orders placed** — 484 vetoed LOW_RELIABILITY_LOW,
+  134 VERY_LOW. Dropping the gate to `--min-reliability VERY_LOW` still takes
+  nothing: 250 HTF_CONFLICT, 235 BELOW_THRESHOLDS, 133 NEGATIVE_EXPECTANCY,
+  with observed rates around p=0.24-0.36. That is the intended answer on this
+  data, not a broken command.
+
+### Not verified here
+- The Pine script's parity with the Python engine. TradingView cannot be
+  scripted from CI, so it is checked by eye or not at all; the file says so.
+- `LiveBroker`'s order path. It needs Windows, MetaTrader5 and a real account,
+  none of which exist in this container. Every gate around it is tested; the
+  `mt5.order_send` call itself is not.
+- The Claude request path (no key here). Only the fallback is exercised.
+
+## [0.13.0] — 2026-08-19 — Phases 17-20: chart, backtest, walk-forward, Monte Carlo
+
+### Added
+- `visualization/chart.py` — offline Plotly HTML: candles, swings, breaks,
+  liquidity, sweeps, order blocks, FVGs, premium/discount and the signal panel.
+  Everything drawn is filtered to `as_of`.
+- `backtesting/engine.py`, `backtesting/metrics.py` — DETERMINISTIC mode takes
+  every candidate; DECISION mode takes only what the decision engine approved
+  from probabilities queried as-of each signal. `assert_no_lookahead()` audits
+  a finished run for entering on/before the signal bar and for resolving
+  before entering.
+- `backtesting/walk_forward.py` — expanding chronological folds with a purge
+  gap of `max_hold_bars`, out-of-sample metrics and per-fold calibration.
+- `backtesting/monte_carlo.py` — IID and block resampling of realised R, with
+  drawdown, losing-streak and risk-of-ruin distributions.
+
+### Changed
+- Drawdown is reported twice and separately: `max_drawdown_r` from the R curve,
+  `max_drawdown_pct` from the account curve. A percentage of a curve that can
+  cross zero is meaningless, and it was reading 129.9%.
+
+### Verified
+- 379/379 tests pass. Sample history: 168 trades, 30.4% win rate, +0.038R
+  expectancy, PF 1.05 — noise, which is what a near-random synthetic should give.
+
+### Noted
+- Monte Carlo median final R is +7.5 under IID but **-1.0 under block
+  resampling**. The gap is serial dependence between overlapping setups showing
+  up on its own, exactly as PROBABILITY_METHODOLOGY.md predicted. Trust the
+  block number.
+
+## [0.12.0] — 2026-08-19 — Phases 14-16: probability, confluence, decision
+
+### Added
+- `probability/historical_stats.py` — five similarity tiers (T1-T5) with
+  back-off; every query filtered on `resolved_at < signal_time`, so a trade
+  still open when the signal fired contributes nothing. The tier actually used
+  travels with the estimate.
+- `probability/probability.py` — beta-binomial posterior with a Jeffreys prior
+  over recency-weighted counts, a Wilson interval on raw counts, and a
+  moving-block bootstrap once n is large enough. When the bootstrap comes back
+  much wider, the analytic interval is understating dependence and is
+  DISCARDED, not quietly reported. Nothing returns a bare number: sample size,
+  effective sample size, interval, tier and reliability travel with it.
+- `probability/calibration.py` — reliability diagram, Brier, log loss, ECE, a
+  base-rate baseline, and isotonic correction fitted on validation only.
+- `signals/confluence.py` — the 100 points of confluence, itemised, each
+  component scoring continuously. Never converted into a probability.
+- `signals/decision_engine.py` — hard vetoes first (insufficient sample, low
+  reliability, R:R below minimum, negative expectancy, stop too wide, HTF
+  conflict), then tiering on probability AND score AND R:R AND reliability
+  together. Every decision carries reason codes and is auditable without
+  re-running the engine.
+- `main.py analyze`.
+
+### Verified
+- 359/359 tests pass. On real data `analyze` returns NO_TRADE at 36.4% from 57
+  samples, LOW reliability, score 25/100 — the system working, not failing.
+
+## [0.11.0] — 2026-08-19 — Phase 13: setups, labelling and the census
+
+### Added
+- `risk/levels.py` — stops from structure with an ATR buffer (never fixed
+  pips), targets preferring real liquidity with an R-multiple fallback, and
+  refusals with reasons (STOP_ON_WRONG_SIDE, STOP_TOO_WIDE, RR_TOO_LOW).
+  Position size rounds DOWN to the broker step.
+- `signals/setups.py` — the five pre-registered families only, built from
+  `MarketContext.at(t)` so `signal_index` is the first issuable bar.
+  Overlapping candidates are flagged superseded, not deleted: the census stays
+  complete while the estimates stay independent.
+- `backtesting/labeling.py` — fill test first, intrabar TP+SL ambiguity
+  resolved as SL_FIRST and flagged, spread and slippage removed at labelling
+  time so a gross-only edge cannot survive, plus MAE/MFE in R.
+- `database/models.py` — SQLite census (setups, outcomes, runs).
+- `main.py build-db`; `tests/conftest.py` gains `make_market_frame()`, because
+  a plain random walk contains almost no FVGs, order blocks or sweeps. Test
+  scaffolding — never a probability input.
+
+### Verified
+- 330/330 tests pass. 18,539 bars → 7,273 candidates (247 non-overlapping),
+  labelled and stored in 23 s.
+
+### Noted
+- A full-history census costs ~20 s; the cost is the nearest-object scans in
+  feature extraction. Acceptable for a one-off build, and it is why Phase 18
+  reuses one `MarketContext`.
+
+## [0.10.0] — 2026-08-19 — Phases 11-12: multi-timeframe, regime, features
+
+### Added
+- `context/mtf_bias.py` — `resample_frame()` drops an incomplete final bucket
+  so a forming HTF bar cannot appear, and `align_htf()` maps each LTF bar to
+  the newest HTF bar that had actually CLOSED by then. Reading an H1 close on
+  the 09:05 M5 bar is the most common way an SMC backtest fools itself.
+- `context/market_regime.py` — ATR percentile × ADX signed by bias → a
+  `regime_key` like `TREND_DOWN|HIGH_VOL`, for grouping rather than filtering.
+- `common/indicators.py` — Wilder ±DI/ADX and a rolling percentile helper.
+- `features/context.py` — `MarketContext` builds every detector once and
+  exposes `at(t)`; because each series is already as-of honest, `at(t)` equals
+  a fresh build over `frame[:t+1]`, asserted rather than assumed.
+- `features/feature_engineering.py` — ~65 features across context, MTF,
+  structure, liquidity, points of interest and trade geometry. Absent objects
+  yield NaN, never 0.0, because a zero reads as a real measurement.
+
+### Verified
+- 310/310 tests pass.
+
+## [0.9.0] — 2026-08-19 — Phases 9-10: order blocks and premium/discount
+
+### Added
+- `orderblocks/order_blocks.py` — the last candle closing against a
+  structure-breaking leg, anchored to its BOS or MSS and known only at that
+  break bar. Zone modes FULL_RANGE / BODY / WICK_TO_BODY. Lifecycle FRESH →
+  TOUCHED → MITIGATED → INVALIDATED → BREAKER with monotone fill depth, so any
+  past bar's state is reproducible. A block dies on a CLOSE through it, not a
+  wick; a dead block retested from the other side flips to a breaker.
+- `context/premium_discount.py` — the dealing range between the confirmed
+  structural low and high, DISCOUNT / EQUILIBRIUM / PREMIUM zones, an optional
+  OTE band, and a NO_RANGE verdict when the range is narrower than
+  `min_range_atr` rather than splitting noise into percentages.
+
+### Verified
+- 290/290 tests pass, including per-bar truncation tests for both.
+
+## [0.8.0] — 2026-08-19 — Phases 7-8: displacement runs and imbalance
+
+### Added
+- Displacement v2: `displacement_run_at()` scores the best run ENDING at bar i
+  (up to `max_run_bars` back), never using anything after i. Three 0.4-ATR
+  pushes in a row now register as the leg they are. BOS/CHOCH/MSS all score runs.
+- `imbalance/fvg.py` — the three-bar gap with a full lifecycle. Fill depth is
+  monotone by construction, so FRESH → PARTIAL → MITIGATED (at consequent
+  encroachment) → INVALIDATED is reproducible at any past bar.
+- `imbalance/ifvg.py` — a gap killed by a CLOSE beyond it and then reclaimed
+  within a window flips polarity, keeping the original range and a link back to
+  its origin. Confirmed at the reclaim bar.
+
+### Changed
+- The displacement imbalance component is switched on and the weights move to
+  the SMC_DEFINITIONS 0.40 / 0.20 / 0.20 / 0.20. **This changes `rules_hash`**,
+  which is what keeping them in config rather than in code is for.
+
+### Verified
+- 271/271 tests pass, including a per-bar truncation test for gaps.
+- 18,539 bars → 761 FVGs (443 rejected as too small), 609 inversions, 0.88 s.
+
 ## [0.7.0] — 2026-08-19 — Phase 6: liquidity sweeps
 
 ### Added

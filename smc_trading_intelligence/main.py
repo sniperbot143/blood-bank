@@ -16,6 +16,8 @@ Read-only analysis. No order is ever placed by this program.
     python main.py backtest  --symbol XAUUSDm --tf M5
     python main.py walkforward --symbol XAUUSDm --tf M5
     python main.py montecarlo  --symbol XAUUSDm --tf M5
+    python main.py paper     --symbol XAUUSDm --tf M5
+    python main.py preflight
     python main.py symbols   --search XAU
     python main.py status
 """
@@ -671,6 +673,14 @@ def cmd_analyze(args: argparse.Namespace, settings: Settings) -> int:
         print(signal.describe())
         if args.json:
             print(json.dumps(signal.as_dict(), indent=2, default=str))
+        if getattr(args, "narrate", False):
+            from optional_ai.claude import narrate
+
+            narration = narrate(signal)
+            print()
+            print(narration.text)
+            print(f"\n[narration source: {narration.source}"
+                  + (f" -- {narration.error}" if narration.error else "") + "]")
 
     if store is not None:
         store.close()
@@ -861,16 +871,138 @@ def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_paper(args: argparse.Namespace, settings: Settings) -> int:
+    """Replay cached bars through the PaperBroker. Still no real order anywhere."""
+    from config.decision_config import DecisionConfig
+    from config.probability_config import ProbabilityConfig
+    from data.normalizer import closed_bars
+    from database.models import SetupStore
+    from execution.broker import PaperBroker
+    from features.context import MarketContext
+    from probability.historical_stats import SimilarityKey
+    from probability.probability import estimate_probabilities, insufficient
+    from signals.confluence import score_setup
+    from signals.decision_engine import decide
+    from signals.setups import detect_setups
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to trade")
+        return 1
+
+    rules = _analysis_rules(args)
+    context = MarketContext.build(frame, rules)
+    setups = detect_setups(context, rules)
+
+    db_path = Path(args.db) if args.db else settings.db_path
+    store = SetupStore(db_path) if db_path.exists() else None
+    if store is None:
+        log.warning("no setup database at %s -- every probability will be INSUFFICIENT", db_path)
+
+    probability_config = ProbabilityConfig(min_samples=args.min_samples)
+    decision_config = DecisionConfig(min_reliability_for_trade=args.min_reliability)
+    if args.min_reliability != "MEDIUM":
+        log.warning("min_reliability=%s -- you are deliberately trading thinner evidence "
+                    "than the default. Paper only.", args.min_reliability)
+    journal = Path(args.journal) if args.journal else settings.data_dir / "paper" / "journal.jsonl"
+    broker = PaperBroker(balance=args.balance, starting_balance=args.balance,
+                         spread_cost=args.spread, slippage=args.slippage,
+                         journal_path=journal)
+
+    by_bar: dict[int, list] = {}
+    for candidate in setups.candidates:
+        by_bar.setdefault(candidate.signal_index, []).append(candidate)
+
+    placed = 0
+    verdicts: dict[str, int] = {}
+    vetoes: dict[str, int] = {}
+    for index in range(len(frame)):
+        # Orders are placed on the signal bar's CLOSE, so they can only fill on
+        # the bars that come after it. Fills first, then new orders.
+        broker.on_bar(frame.iloc[index], index)
+
+        for candidate in by_bar.get(index, ()):
+            if store is not None:
+                estimate = estimate_probabilities(
+                    store, SimilarityKey.from_candidate(candidate),
+                    as_of=candidate.signal_time, config=probability_config,
+                )["tp1"]
+            else:
+                estimate = insufficient("tp1")
+            signal = decide(candidate, estimate, score=score_setup(candidate, decision_config),
+                            config=decision_config, rules_hash=rules.rules_hash)
+            verdicts[signal.decision.value] = verdicts.get(signal.decision.value, 0) + 1
+            if not signal.decision.is_trade:
+                for code in signal.reason_codes:
+                    if " " in code:          # a detail string, not a reason code
+                        continue
+                    vetoes[code] = vetoes.get(code, 0) + 1
+                continue
+            if args.strong_only and not signal.decision.is_strong:
+                continue
+            broker.place(signal, volume=args.volume, expires_in_bars=args.expiry)
+            placed += 1
+
+    if store is not None:
+        store.close()
+
+    print(f"symbol          : {args.symbol} {tf}")
+    print(f"bars replayed   : {len(frame):,}")
+    print(f"signals taken   : {placed} of {len(setups.candidates):,} candidates")
+    if verdicts:
+        spread = ", ".join(f"{k}={v}" for k, v in sorted(verdicts.items()))
+        print(f"decisions       : {spread}")
+    if placed == 0 and vetoes:
+        top = sorted(vetoes.items(), key=lambda kv: -kv[1])[:5]
+        print("why nothing was taken:")
+        for code, count in top:
+            print(f"  {code:<28} {count:>6,}")
+    print(broker.summary())
+    print(f"journal         : {journal}")
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        broker.to_frame().to_csv(out, index=False)
+        print(f"positions       : {out}")
+    return 0
+
+
+def cmd_preflight(_args: argparse.Namespace, settings: Settings) -> int:
+    """What the machine can check before live trading, and what it cannot."""
+    from execution.live import CONFIRMATION_PHRASE, is_enabled, preflight
+
+    report = preflight(settings)
+    print(report.summary())
+    print()
+    print(f"live trading enabled : {is_enabled()}")
+    print(f"preflight passed     : {report.passed}")
+    print(f'confirmation phrase  : "{CONFIRMATION_PHRASE}"')
+    print("\nNothing in this program places an order. execution/live.py must be "
+          "called deliberately, with the phrase above, by code you write.")
+    return 0 if report.passed else 1
+
+
 def cmd_status(_args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5_AVAILABLE
+    from execution.live import is_enabled as live_enabled
+    from optional_ai.claude import is_enabled as claude_enabled
 
-    print("SMC Trading Intelligence -- Phase 1 (data layer)")
+    print("SMC Trading Intelligence -- phases 1-24 complete")
     print(f"python            : {sys.version.split()[0]}")
     print(f"pandas            : {pd.__version__}")
     print(f"MT5 package       : {'available' if MT5_AVAILABLE else 'NOT available (CSV/Parquet mode)'}")
     print(f"cache dir         : {settings.cache_dir}")
     print(f"broker UTC offset : {settings.broker_utc_offset_hours:+.1f} h")
     print(f"drop forming bar  : {settings.drop_forming_bar}")
+    print(f"live trading      : {'ENABLED' if live_enabled() else 'disabled (default)'}")
+    print(f"Claude narration  : {'enabled' if claude_enabled() else 'off (local narration)'}")
 
     manifests = cache.list_cached(settings)
     if not manifests:
@@ -1031,6 +1163,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_an.add_argument("--db", default=None)
     p_an.add_argument("--min-samples", type=int, default=30, dest="min_samples")
     p_an.add_argument("--json", action="store_true", help="also print the signal JSON")
+    p_an.add_argument("--narrate", action="store_true",
+                      help="add a written explanation (Claude if enabled, local otherwise)")
     p_an.set_defaults(func=cmd_analyze)
 
     p_ch = sub.add_parser("chart", help="render a local HTML chart")
@@ -1100,6 +1234,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_mc.add_argument("--risk", type=float, default=1.0)
     p_mc.add_argument("--seed", type=int, default=20240819)
     p_mc.set_defaults(func=cmd_montecarlo)
+
+    p_pa = sub.add_parser("paper", help="replay signals through the paper broker")
+    p_pa.add_argument("--symbol", required=True)
+    p_pa.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_pa.add_argument("--bars", type=int, default=None)
+    p_pa.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_pa.add_argument("--left", type=int, default=5)
+    p_pa.add_argument("--right", type=int, default=5)
+    p_pa.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_pa.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_pa.add_argument("--db", default=None)
+    p_pa.add_argument("--min-samples", type=int, default=30, dest="min_samples")
+    p_pa.add_argument("--balance", type=float, default=10_000.0)
+    p_pa.add_argument("--volume", type=float, default=1.0)
+    p_pa.add_argument("--spread", type=float, default=0.0, help="cost per side, in price")
+    p_pa.add_argument("--slippage", type=float, default=0.0, help="per side, in price")
+    p_pa.add_argument("--expiry", type=int, default=12, help="bars a limit stays alive")
+    p_pa.add_argument("--strong-only", action="store_true", dest="strong_only")
+    p_pa.add_argument("--min-reliability", default="MEDIUM", dest="min_reliability",
+                      choices=["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH"],
+                      help="lowering this trades on thinner evidence; paper only")
+    p_pa.add_argument("--journal", default=None)
+    p_pa.add_argument("--out", default=None, help="write the position list to CSV")
+    p_pa.set_defaults(func=cmd_paper)
+
+    sub.add_parser("preflight", help="live-trading gate report (never trades)"
+                   ).set_defaults(func=cmd_preflight)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)

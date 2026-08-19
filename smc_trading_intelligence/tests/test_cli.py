@@ -87,8 +87,9 @@ def test_ingest_lists_non_weekend_gaps_for_review(env, capsys):
 def test_status_runs_without_mt5(env, capsys):
     assert cli.main(["status"]) == 0
     out = capsys.readouterr().out
-    assert "Phase 1 (data layer)" in out
+    assert "SMC Trading Intelligence" in out
     assert "MT5 package" in out
+    assert "live trading      : disabled (default)" in out
 
 
 def test_status_lists_cached_datasets(env, capsys):
@@ -116,3 +117,30 @@ def test_ingest_via_mt5_without_the_package_returns_code_2(env, caplog):
         pytest.skip("MT5 present; the unavailable path can't be exercised")
     assert cli.main(["ingest", "--symbol", "XAUUSDm", "--tf", "M5", "--bars", "100"]) == 2
     assert "MetaTrader5" in caplog.text
+
+
+def test_preflight_refuses_and_never_trades(env, capsys, monkeypatch):
+    monkeypatch.delenv("ENABLE_LIVE", raising=False)
+    assert cli.main(["preflight"]) == 1
+
+    out = capsys.readouterr().out
+    assert "[FAIL] ENABLE_LIVE is set" in out
+    assert "preflight passed     : False" in out
+    assert "only you can confirm these:" in out
+
+
+def test_paper_replays_without_a_database(env, capsys, caplog):
+    """A paper run with no census must say so, not invent probabilities."""
+    cli.main(["ingest", "--symbol", "XAUUSDm", "--tf", "M5",
+              "--csv", _write_csv(env, n=400)])
+    capsys.readouterr()
+
+    journal = env / "paper.jsonl"
+    assert cli.main(["paper", "--symbol", "XAUUSDm", "--tf", "M5",
+                     "--left", "2", "--right", "2", "--min-atr", "0.5",
+                     "--journal", str(journal)]) == 0
+
+    out = capsys.readouterr().out
+    assert "bars replayed" in out
+    assert "orders placed" in out
+    assert "no setup database" in caplog.text

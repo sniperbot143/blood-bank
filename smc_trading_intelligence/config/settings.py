@@ -199,8 +199,13 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
     if tf := _env_str("DEFAULT_TIMEFRAME"):
         kwargs["default_timeframe"] = tf
     if data_dir := _env_str("DATA_DIR"):
+        # DATA_DIR moves the whole working set, the census included: a relocated
+        # cache pointing at the default database would mix two datasets.
         base = Path(data_dir)
-        kwargs |= {"data_dir": base, "raw_dir": base / "raw", "cache_dir": base / "cache"}
+        kwargs |= {"data_dir": base, "raw_dir": base / "raw", "cache_dir": base / "cache",
+                   "db_path": base / "smc.db"}
+    if db_path := _env_str("DB_PATH"):
+        kwargs["db_path"] = Path(db_path)
 
     return Settings(**kwargs)
 

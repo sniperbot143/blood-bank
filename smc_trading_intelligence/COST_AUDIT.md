@@ -48,3 +48,19 @@ local free component above.
 - **Time.** Building and validating this properly is the expensive input, not software.
 - **Trading costs** — spread, swap, commission and slippage are modelled in every
   backtest; they are a cost of the strategy, not of the software.
+
+## As built (all 24 phases)
+
+Nothing in the recurring-cost column changed. The finished system imports, at
+module load: pandas, numpy, pyarrow, pydantic, python-dotenv — all free. plotly
+is needed only by `main.py chart`; scipy and scikit-learn are optional
+refinements with working pure-numpy fallbacks; `anthropic` is never imported
+unless `ENABLE_CLAUDE=true` **and** a key is present, and its absence is a
+degraded narration, not an error.
+
+Verification: `python main.py analyze`, `backtest`, `walkforward`, `montecarlo`
+and `paper` all run with no API key, no network and no account. The full test
+suite (394 tests) makes no outbound request.
+
+**Total recurring cost, as built: ₹0.**
+
