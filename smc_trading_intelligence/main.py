@@ -12,6 +12,10 @@ Read-only analysis. No order is ever placed by this program.
     python main.py sweeps    --symbol XAUUSDm --tf M5
     python main.py build-db  --symbol XAUUSDm --tf M5
     python main.py analyze   --symbol XAUUSDm --tf M5
+    python main.py chart     --symbol XAUUSDm --tf M5 --with-signal
+    python main.py backtest  --symbol XAUUSDm --tf M5
+    python main.py walkforward --symbol XAUUSDm --tf M5
+    python main.py montecarlo  --symbol XAUUSDm --tf M5
     python main.py symbols   --search XAU
     python main.py status
 """
@@ -673,6 +677,171 @@ def cmd_analyze(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_chart(args: argparse.Namespace, settings: Settings) -> int:
+    from data.normalizer import closed_bars
+    from features.context import MarketContext
+    from signals.setups import detect_setups
+    from visualization.chart import ChartOptions, render_chart
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if frame.empty:
+        log.error("no bars to chart")
+        return 1
+
+    rules = _analysis_rules(args)
+    context = MarketContext.build(frame, rules)
+    at = _resolve_bar(frame, args.as_of)
+
+    signal = None
+    if args.with_signal:
+        from config.decision_config import DecisionConfig
+        from config.probability_config import ProbabilityConfig
+        from database.models import SetupStore
+        from probability.historical_stats import SimilarityKey
+        from probability.probability import estimate_probabilities, insufficient
+        from signals.decision_engine import decide
+
+        candidates = [c for c in detect_setups(context, rules).candidates
+                      if c.signal_index == at]
+        if candidates:
+            db_path = Path(args.db) if args.db else settings.db_path
+            if db_path.exists():
+                with SetupStore(db_path) as store:
+                    estimate = estimate_probabilities(
+                        store, SimilarityKey.from_candidate(candidates[-1]),
+                        as_of=candidates[-1].signal_time,
+                        config=ProbabilityConfig(min_samples=args.min_samples),
+                    )["tp1"]
+            else:
+                estimate = insufficient("tp1")
+            signal = decide(candidates[-1], estimate, config=DecisionConfig(),
+                            rules_hash=rules.rules_hash)
+
+    output = Path(args.out) if args.out else (
+        settings.data_dir / "charts" / f"{args.symbol}_{tf}_{at}.html")
+    path = render_chart(context, output, as_of=at,
+                        options=ChartOptions(bars=args.bars or 400), signal=signal)
+    print(f"chart written to {path}")
+    print(f"open it in a browser -- it is a standalone file, no server needed")
+    return 0
+
+
+def cmd_backtest(args: argparse.Namespace, settings: Settings) -> int:
+    from backtesting.engine import BacktestMode, assert_no_lookahead, run_backtest
+    from config.probability_config import ProbabilityConfig
+    from data.normalizer import closed_bars
+    from database.models import SetupStore
+    from features.context import MarketContext
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+    if frame.empty:
+        log.error("no bars to backtest")
+        return 1
+
+    rules = _analysis_rules(args)
+    mode = BacktestMode(args.mode_backtest)
+    context = MarketContext.build(frame, rules)
+
+    store = None
+    if mode is BacktestMode.DECISION:
+        db_path = Path(args.db) if args.db else settings.db_path
+        if not db_path.exists():
+            log.error("DECISION mode needs a setup database: run build-db first")
+            return 1
+        store = SetupStore(db_path)
+
+    result = run_backtest(frame, rules, mode=mode, context=context, store=store,
+                          probability_config=ProbabilityConfig(min_samples=args.min_samples),
+                          risk_per_trade=args.risk / 100.0)
+    assert_no_lookahead(result)
+    if store is not None:
+        store.close()
+
+    print(result.summary())
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        result.to_frame().to_csv(out, index=False)
+        print(f"\ntrades written to {out}")
+    return 0
+
+
+def cmd_walkforward(args: argparse.Namespace, settings: Settings) -> int:
+    from backtesting.walk_forward import run_walk_forward
+    from config.probability_config import ProbabilityConfig
+    from data.normalizer import closed_bars
+    from database.models import SetupStore
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+
+    db_path = Path(args.db) if args.db else settings.db_path
+    if not db_path.exists():
+        log.error("walk-forward needs a setup database: run build-db first")
+        return 1
+
+    rules = _analysis_rules(args)
+    with SetupStore(db_path) as store:
+        result = run_walk_forward(
+            frame, store, rules, folds=args.folds, train_fraction=args.train,
+            purge_bars=args.purge,
+            probability_config=ProbabilityConfig(min_samples=args.min_samples),
+        )
+    print(result.summary())
+    return 0
+
+
+def cmd_montecarlo(args: argparse.Namespace, settings: Settings) -> int:
+    from backtesting.engine import run_backtest
+    from backtesting.monte_carlo import compare_methods
+    from data.normalizer import closed_bars
+
+    tf = get_timeframe(args.tf).name
+    try:
+        frame = closed_bars(cache.read_bars(args.symbol, tf, settings))
+    except FileNotFoundError as exc:
+        log.error("%s", exc)
+        return 1
+    if args.bars:
+        frame = frame.iloc[-args.bars:]
+
+    rules = _analysis_rules(args)
+    result = run_backtest(frame, rules)
+    r = [t.r_multiple for t in result.trades]
+    if len(r) < 5:
+        log.error("only %d trades -- not enough to resample", len(r))
+        return 1
+
+    print(f"resampling {len(r)} realised trades\n")
+    for name, simulation in compare_methods(
+        r, iterations=args.iterations, block_length=args.block,
+        risk_per_trade=args.risk / 100.0, seed=args.seed,
+    ).items():
+        print(simulation.summary())
+        print()
+    print("A large gap between IID and BLOCK means the losses cluster, and the")
+    print("IID answer is the comfortable one rather than the true one.")
+    return 0
+
+
 def cmd_symbols(args: argparse.Namespace, settings: Settings) -> int:
     from data.mt5_connector import MT5Connector, MT5Unavailable
 
@@ -863,6 +1032,74 @@ def build_parser() -> argparse.ArgumentParser:
     p_an.add_argument("--min-samples", type=int, default=30, dest="min_samples")
     p_an.add_argument("--json", action="store_true", help="also print the signal JSON")
     p_an.set_defaults(func=cmd_analyze)
+
+    p_ch = sub.add_parser("chart", help="render a local HTML chart")
+    p_ch.add_argument("--symbol", required=True)
+    p_ch.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_ch.add_argument("--bars", type=int, default=400)
+    p_ch.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_ch.add_argument("--left", type=int, default=5)
+    p_ch.add_argument("--right", type=int, default=5)
+    p_ch.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_ch.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_ch.add_argument("--as-of", default=None)
+    p_ch.add_argument("--out", default=None)
+    p_ch.add_argument("--with-signal", action="store_true")
+    p_ch.add_argument("--db", default=None)
+    p_ch.add_argument("--min-samples", type=int, default=30, dest="min_samples")
+    p_ch.set_defaults(func=cmd_chart)
+
+    p_bt = sub.add_parser("backtest", help="replay history and report performance")
+    p_bt.add_argument("--symbol", required=True)
+    p_bt.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_bt.add_argument("--bars", type=int, default=None)
+    p_bt.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_bt.add_argument("--backtest-mode", default="DETERMINISTIC", dest="mode_backtest",
+                      choices=["DETERMINISTIC", "DECISION"])
+    p_bt.add_argument("--left", type=int, default=5)
+    p_bt.add_argument("--right", type=int, default=5)
+    p_bt.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_bt.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_bt.add_argument("--db", default=None)
+    p_bt.add_argument("--min-samples", type=int, default=30, dest="min_samples")
+    p_bt.add_argument("--risk", type=float, default=1.0, help="percent risked per trade")
+    p_bt.add_argument("--out", default=None, help="write the trade list to CSV")
+    p_bt.set_defaults(func=cmd_backtest)
+
+    p_wf = sub.add_parser("walkforward", help="out-of-sample validation with purged folds")
+    p_wf.add_argument("--symbol", required=True)
+    p_wf.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_wf.add_argument("--bars", type=int, default=None)
+    p_wf.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_wf.add_argument("--left", type=int, default=5)
+    p_wf.add_argument("--right", type=int, default=5)
+    p_wf.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_wf.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_wf.add_argument("--folds", type=int, default=4)
+    p_wf.add_argument("--train", type=float, default=0.5, help="fraction in the first train window")
+    p_wf.add_argument("--purge", type=int, default=None, help="purge gap in bars")
+    p_wf.add_argument("--db", default=None)
+    p_wf.add_argument("--min-samples", type=int, default=30, dest="min_samples")
+    p_wf.set_defaults(func=cmd_walkforward)
+
+    p_mc = sub.add_parser("montecarlo", help="drawdown and risk-of-ruin distributions")
+    p_mc.add_argument("--symbol", required=True)
+    p_mc.add_argument("--tf", default=None, choices=sorted(TIMEFRAMES))
+    p_mc.add_argument("--bars", type=int, default=None)
+    p_mc.add_argument("--mode", default="FRACTAL",
+                      choices=["FRACTAL", "FIXED_LOOKBACK", "ATR_ADAPTIVE"])
+    p_mc.add_argument("--left", type=int, default=5)
+    p_mc.add_argument("--right", type=int, default=5)
+    p_mc.add_argument("--min-atr", type=float, default=2.0, dest="min_atr")
+    p_mc.add_argument("--atr-period", type=int, default=14, dest="atr_period")
+    p_mc.add_argument("--iterations", type=int, default=2000)
+    p_mc.add_argument("--block", type=int, default=5)
+    p_mc.add_argument("--risk", type=float, default=1.0)
+    p_mc.add_argument("--seed", type=int, default=20240819)
+    p_mc.set_defaults(func=cmd_montecarlo)
 
     p_sym = sub.add_parser("symbols", help="list broker symbols (needs MT5)")
     p_sym.add_argument("--search", default=None)
